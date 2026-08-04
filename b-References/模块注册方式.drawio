@@ -1,0 +1,90 @@
+<mxfile host="Electron">
+  <diagram name="第 1 页" id="KLPGFe6YH5xt5Z02z6af">
+    <mxGraphModel dx="2015" dy="823" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-11" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="NujSeIjQZVNnP0t0ycPO-9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-12" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="NujSeIjQZVNnP0t0ycPO-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-17" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="NujSeIjQZVNnP0t0ycPO-16">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="525" y="660" />
+              <mxPoint x="860" y="660" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-20" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="NujSeIjQZVNnP0t0ycPO-18">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-22" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="NujSeIjQZVNnP0t0ycPO-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="OHS服务" vertex="1">
+          <mxGeometry height="60" width="1090" x="-110" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-7" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="NujSeIjQZVNnP0t0ycPO-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-8" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="NujSeIjQZVNnP0t0ycPO-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="OHS窗口" vertex="1">
+          <mxGeometry height="60" width="370" x="340" y="770" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="模块1窗口" vertex="1">
+          <mxGeometry height="60" width="120" x="340" y="880" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="模块2窗口" vertex="1">
+          <mxGeometry height="60" width="120" x="590" y="880" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-14" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="NujSeIjQZVNnP0t0ycPO-3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="130" y="1000" />
+              <mxPoint x="400" y="1000" />
+            </Array>
+            <mxPoint x="170" y="900" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-9" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="模块1能力" vertex="1">
+          <mxGeometry height="60" width="120" x="70" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-15" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="NujSeIjQZVNnP0t0ycPO-4">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="1100" />
+              <mxPoint x="650" y="1100" />
+            </Array>
+            <mxPoint x="650" y="1070" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-10" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="模块2能力" vertex="1">
+          <mxGeometry height="60" width="120" x="200" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-16" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="（改）模块3窗口和能力" vertex="1">
+          <mxGeometry height="60" width="200" x="800" y="770" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-21" edge="1" parent="1" source="NujSeIjQZVNnP0t0ycPO-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="NujSeIjQZVNnP0t0ycPO-19">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="-20" y="1060" />
+              <mxPoint x="525" y="1060" />
+            </Array>
+            <mxPoint x="-10" y="1190" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-18" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="原模块3" vertex="1">
+          <mxGeometry height="60" width="120" x="-80" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="NujSeIjQZVNnP0t0ycPO-19" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="原模块3" vertex="1">
+          <mxGeometry height="60" width="120" x="465" y="880" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
