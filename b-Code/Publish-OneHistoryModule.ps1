@@ -96,6 +96,28 @@ function Update-CommandManual {
     }
 }
 
+function Repair-VulcanAutostart {
+    param([Parameter(Mandatory = $true)][string]$ModuleRoot)
+
+    $hostExecutable = Join-Path $ModuleRoot 'host\HistoryVulcan.exe'
+    if (-not (Test-Path -LiteralPath $hostExecutable -PathType Leaf)) {
+        Write-Warning "HistoryVulcan 登录启动未修复：正式快照中找不到 $hostExecutable"
+        return
+    }
+
+    try {
+        & $hostExecutable '--repair-autostart'
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "HistoryVulcan 登录启动修复失败（退出码 $LASTEXITCODE）"
+            return
+        }
+        Write-Host "HistoryVulcan 登录启动已按正式 Z 快照修复"
+    }
+    catch {
+        Write-Warning "HistoryVulcan 登录启动修复失败：$($_.Exception.Message)"
+    }
+}
+
 function Assert-ChildPath {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -464,6 +486,9 @@ try {
     if ($formalBackedUp) { Write-Host "Previous formal snapshot: $formalBackup" }
 
     Update-CommandManual
+    if ($definition.Kind -eq 'host' -and $Module -eq 'HistoryVulcan') {
+        Repair-VulcanAutostart $formalRoot
+    }
 }
 finally {
     if (Test-Path -LiteralPath $workRoot) {

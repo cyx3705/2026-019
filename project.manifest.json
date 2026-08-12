@@ -96,7 +96,7 @@
     },
     {
       "name": "HistoryVulcan",
-      "version": "3.4.0",
+      "version": "3.11.0",
       "purpose": "宿主 Core 契约与指令总线；从 2026-023-HistoryVulcan/z-HistoryVulcan 消费"
     },
     {
@@ -106,12 +106,12 @@
     },
     {
       "name": "HistoryJanus",
-      "version": "3.7.0",
+      "version": "3.8.0",
       "purpose": "集中发布模块；源码与测试仍由 2026-020-HistoryJanus 拥有"
     },
     {
       "name": "HistoryMercury",
-      "version": "4.2.0",
+      "version": "4.3.1",
       "purpose": "集中发布模块；源码与测试仍由 2026-021-HistoryMercury 拥有"
     }
   ],

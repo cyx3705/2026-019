@@ -1,18 +1,18 @@
 {
     "schemaVersion":  1,
     "module":  "HistoryJanus",
-    "version":  "3.7.0",
+    "version":  "3.8.0",
     "sourceProject":  "2026-020-HistoryJanus",
-    "sourceCommit":  "21f982dcf48d87dfc4cc67b5d8958374b26af8ab",
+    "sourceCommit":  "7352ffe4662e5b5b8de6386473a744c84e98a2f4",
     "sourceDirty":  false,
     "sourceDocumentRoot":  "b-Office/package",
     "artifactSnapshot":  "../../../../2026-020-HistoryJanus/z-HistoryJanus",
-    "generatedAtUtc":  "2026-08-12T03:52:29.1909329+00:00",
+    "generatedAtUtc":  "2026-08-12T05:17:54.4762051+00:00",
     "documents":  [
                       {
                           "file":  "模块API.md",
-                          "bytes":  7433,
-                          "sha256":  "1940A9D4CCFBEFCAD4F4A2C3BD1EBB2FA9EB9DCB7C53B6C2FF4BC337AC5B2B44"
+                          "bytes":  7859,
+                          "sha256":  "5B843A1D9FD3D89B960EC9B1B86D04F582556547AD2DDE7DD5BFB76092B329A9"
                       }
                   ]
 }
