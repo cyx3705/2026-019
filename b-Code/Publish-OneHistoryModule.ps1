@@ -494,7 +494,17 @@ try {
             Stop-VulcanFormalProcesses $formalRoot
         }
         if (Test-Path -LiteralPath $formalRoot) {
-            Move-Item -LiteralPath $formalRoot -Destination $formalBackup
+            $moved = $false
+            for ($attempt = 0; $attempt -lt 5 -and -not $moved; $attempt++) {
+                try {
+                    Move-Item -LiteralPath $formalRoot -Destination $formalBackup -ErrorAction Stop
+                    $moved = $true
+                }
+                catch {
+                    if ($attempt -eq 4) { throw }
+                    Start-Sleep -Milliseconds 500
+                }
+            }
             $formalBackedUp = $true
         }
         Move-Item -LiteralPath $formalStage -Destination $formalRoot
