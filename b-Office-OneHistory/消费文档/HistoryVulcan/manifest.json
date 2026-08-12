@@ -1,18 +1,18 @@
 {
     "schemaVersion":  1,
     "module":  "HistoryVulcan",
-    "version":  "3.11.1",
+    "version":  "3.11.2",
     "sourceProject":  "2026-023-HistoryVulcan",
-    "sourceCommit":  "cc901acb93813efd1726520f144a57cf12f9bca6",
-    "sourceDirty":  true,
+    "sourceCommit":  "8e6214791fd909d0fd8c77742b421aeff309508e",
+    "sourceDirty":  false,
     "sourceDocumentRoot":  "b-Office/package",
     "artifactSnapshot":  "../../../../2026-023-HistoryVulcan/z-HistoryVulcan",
-    "generatedAtUtc":  "2026-08-12T09:33:09.2010892+00:00",
+    "generatedAtUtc":  "2026-08-12T14:19:15.8737713+00:00",
     "documents":  [
                       {
                           "file":  "HistoryVulcan_API与指令手册.md",
-                          "bytes":  39482,
-                          "sha256":  "4F9230903E03EC00A0CACED444594B21D2FFE3E2987D7D0568CE4372C338825E"
+                          "bytes":  39518,
+                          "sha256":  "4A6B2B74163A8DADC62E94D610773085E75CBF6D90D3508C26B830218F046F79"
                       },
                       {
                           "file":  "HistoryVulcan_UI风格与嵌入页面规范.md",
@@ -26,8 +26,8 @@
                       },
                       {
                           "file":  "HistoryVulcan_消费变更摘要.md",
-                          "bytes":  18036,
-                          "sha256":  "38143A2268C486D8FCB7634752546B6B2F72F49C7970793401496D56DBF24484"
+                          "bytes":  18275,
+                          "sha256":  "2AECBFB2C87866C08D641A8E8BA26FB32A70F0DF0541FA0E81846F2B0939AC8D"
                       },
                       {
                           "file":  "HistoryVulcan_运行时约束与已知限制.md",
