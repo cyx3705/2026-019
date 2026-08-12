@@ -118,6 +118,46 @@ function Repair-VulcanAutostart {
     }
 }
 
+function Stop-VulcanFormalProcesses {
+    param([Parameter(Mandatory = $true)][string]$ModuleRoot)
+
+    $formalRoot = [IO.Path]::GetFullPath($ModuleRoot).TrimEnd('\') + '\'
+    $hostExecutable = [IO.Path]::GetFullPath((Join-Path $ModuleRoot 'host\HistoryVulcan.exe'))
+    if (-not $hostExecutable.StartsWith($formalRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "HistoryVulcan formal executable escaped the formal root: $hostExecutable"
+    }
+
+    for ($attempt = 0; $attempt -lt 3; $attempt++) {
+        $targets = @(Get-CimInstance Win32_Process -Filter "Name='HistoryVulcan.exe'" |
+            Where-Object {
+                -not [string]::IsNullOrWhiteSpace([string]$_.ExecutablePath) -and
+                [IO.Path]::GetFullPath([string]$_.ExecutablePath).Equals(
+                    $hostExecutable,
+                    [StringComparison]::OrdinalIgnoreCase)
+            })
+        if ($targets.Count -eq 0) {
+            Write-Host 'HistoryVulcan 正式宿主进程已停止，可安全提升快照'
+            return
+        }
+
+        foreach ($target in $targets) {
+            Stop-Process -Id $target.ProcessId -Force -ErrorAction Stop
+        }
+        Start-Sleep -Milliseconds 300
+    }
+
+    $remaining = @(Get-CimInstance Win32_Process -Filter "Name='HistoryVulcan.exe'" |
+        Where-Object {
+            -not [string]::IsNullOrWhiteSpace([string]$_.ExecutablePath) -and
+            [IO.Path]::GetFullPath([string]$_.ExecutablePath).Equals(
+                $hostExecutable,
+                [StringComparison]::OrdinalIgnoreCase)
+        })
+    if ($remaining.Count -gt 0) {
+        throw "HistoryVulcan 正式宿主仍在运行，拒绝移动正式快照：$($remaining.ProcessId -join ', ')"
+    }
+}
+
 function Assert-ChildPath {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -449,6 +489,10 @@ try {
     $documentsBackedUp = $false
     $documentsPromoted = $false
     try {
+        if ($definition.Kind -eq 'host' -and $Module -eq 'HistoryVulcan' -and
+            (Test-Path -LiteralPath $formalRoot)) {
+            Stop-VulcanFormalProcesses $formalRoot
+        }
         if (Test-Path -LiteralPath $formalRoot) {
             Move-Item -LiteralPath $formalRoot -Destination $formalBackup
             $formalBackedUp = $true
