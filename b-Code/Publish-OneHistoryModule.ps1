@@ -501,8 +501,9 @@ try {
                     $moved = $true
                 }
                 catch {
-                    if ($attempt -eq 4) { throw }
-                    Start-Sleep -Milliseconds 500
+                    if ($attempt -lt 4) {
+                        Start-Sleep -Milliseconds 500
+                    }
                 }
             }
             if ($moved) {
