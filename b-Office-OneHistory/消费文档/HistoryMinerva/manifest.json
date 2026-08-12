@@ -3,11 +3,11 @@
     "module":  "HistoryMinerva",
     "version":  "4.3.2",
     "sourceProject":  "2026-024-HistoryMinerva",
-    "sourceCommit":  "bbe61f998c8a6d136998e787182830d6c2478b86",
-    "sourceDirty":  true,
+    "sourceCommit":  "3a30beb4662e1657b1ffa1c5983291fe1c8fc324",
+    "sourceDirty":  false,
     "sourceDocumentRoot":  "b-Office/package",
     "artifactSnapshot":  "../../../../2026-024-HistoryMinerva/z-HistoryMinerva",
-    "generatedAtUtc":  "2026-08-11T15:25:00.6317397+00:00",
+    "generatedAtUtc":  "2026-08-12T03:56:18.5481812+00:00",
     "documents":  [
                       {
                           "file":  "模块API.md",
