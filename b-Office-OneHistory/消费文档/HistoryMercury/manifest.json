@@ -1,13 +1,13 @@
 {
     "schemaVersion":  1,
     "module":  "HistoryMercury",
-    "version":  "4.3.1",
+    "version":  "4.4.0",
     "sourceProject":  "2026-021-HistoryMercury",
-    "sourceCommit":  "9668ff93ffec59da3925c2fcc6f96833089d3aa7",
+    "sourceCommit":  "3a83e2731348b95af86574cc213a10fdc0466fd8",
     "sourceDirty":  true,
     "sourceDocumentRoot":  "b-Office/package",
     "artifactSnapshot":  "../../../../2026-021-HistoryMercury/z-HistoryMercury",
-    "generatedAtUtc":  "2026-08-11T15:52:29.1211717+00:00",
+    "generatedAtUtc":  "2026-08-12T09:25:11.4991138+00:00",
     "documents":  [
                       {
                           "file":  "复用说明.md",

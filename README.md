@@ -14,7 +14,7 @@ Diana 是 AI 的翻译官（公共文档、巡检、工具中继）。Diana 不�
 | --- | --- |
 | [`project.manifest.json`](./project.manifest.json) | 项目身份、活动目录、文档与命令的机器可读清单 |
 | [`AGENTS.md`](./AGENTS.md) | AI 工作合同：读取顺序、真值判定、边界 |
-| [`b-Office-OneHistory/`](./b-Office-OneHistory/) | **跨项目公共文档区**：OneHistory 定义、命名规范、消费文档索引 |
+| [`b-Office-OneHistory/文档中心.md`](./b-Office-OneHistory/文档中心.md) | **跨项目公共文档中心**：OneHistory 定义、命名规范和消费文档入口 |
 | [`b-Office-Diana/`](./b-Office-Diana/) | Diana 自身的项目合同 |
 | [`b-Code/Publish-OneHistoryModule.ps1`](./b-Code/Publish-OneHistoryModule.ps1) | 集中执行已登记模块的候选构建、测试、正式提升和消费文档镜像 |
 | [`b-Code/module-publish.manifest.json`](./b-Code/module-publish.manifest.json) | 普通模块的发布登记与验证步骤；新增普通模块无需修改主发布脚本 |
@@ -29,15 +29,17 @@ Diana 是 AI 的翻译官（公共文档、巡检、工具中继）。Diana 不�
    工作区 / 消费区 各指什么。
 2. [目录与命名规范](./b-Office-OneHistory/定义/目录与命名规范.md) —— 指令三段式、
    版本单一来源、文档结构。
-3. [消费文档索引](./b-Office-OneHistory/消费文档索引.md) —— 要接入某个模块时从这里跳转。
+3. [OneHistory 文档中心](./b-Office-OneHistory/文档中心.md) —— 要接入某个模块或查公共定义时从这里跳转。
 
 ## 指令
 
-10 条，三类，除 `diana.relay.call` 外全部只读。
+13 条，三类，除 `diana.relay.call` 外全部只读；其中 `diana.project.*` 还提供四个模块项目的
+manifest、现行文档和对齐检查。
 
 | 类 | 指令 | 用途 |
 | --- | --- | --- |
 | `project` | `diana.project.summary` / `recent` / `largest` | 已登记工作树的只读巡检 |
+| `project` | `diana.project.manifest` / `docs` / `align` | 四个模块项目的 manifest、现行文档与对齐检查 |
 | `kit` | `diana.kit.sha256` / `base64` / `guid` / `now` | 无副作用的小计算 |
 | `relay` | `diana.relay.list` / `describe` / `call` | 按当前 MCP 策略实时列举与调用工具，绕开会话里的旧快照 |
 

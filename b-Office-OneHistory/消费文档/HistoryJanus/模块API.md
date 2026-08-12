@@ -36,7 +36,7 @@ if (!result.Success)
 
 | ID | 标题 | 默认位置 | 用途 |
 | --- | --- | --- | --- |
-| `overview` | 项目总览 | 中央工作区 | 项目列表、z/Z 级元文件夹、最近提交与共享项目选择 |
+| `overview` | 项目总览 | 中央工作区 | 项目列表、工作树干净状态、z/Z 级元文件夹、最近提交与共享项目选择 |
 | `projops` | 项目操作 | 左侧（宽度占比 `0.38`） | 创建、提交、推送；底部同一行分段切换 Git 文件规则、分支历史与 GitHub 连接治理 |
 
 两个 ID 是布局兼容合同。**默认落位（3.7.0）**：`overview` 占中央工作区，`projops` 停靠左侧、默认宽度占比 0.38；`overview` 不再声明 `DefaultTabTarget`，落位不依赖 HistoryMercury 是否已装载。已保存的用户布局优先于默认落位。其他模块不能重复注册这些 ID；需要联动项目选择时应通过 Janus 命令读取事实，不访问页面私有状态。3.2.0 起撤销 `tree`、`meta`；3.3.0 起撤销 `history`；3.4.0 引入的 `github` 窗口在 3.7.0 退役，其内容并入 `projops` 底部分段。GitHub 写操作（登录、注销、提交身份、origin 修改）维持仅限页面内经确认执行，不进入命令总线。
@@ -52,7 +52,7 @@ if (!result.Success)
 | 命令 | 模式 | 用途 |
 | --- | --- | --- |
 | `janus.status` | 只读 | 返回模块身份和注册状态 |
-| `janus.proj.list` | 只读 | 列出项目工作树 |
+| `janus.proj.list` | 只读 | 列出项目工作树；`status=true` 时结果含 `IsClean`（`true/false/null`）和 `WorktreeStatusMessage`，默认不扫描状态 |
 | `janus.proj.tree` | 只读 | 读取或刷新继承树 |
 | `janus.proj.scan` | 只读 | 扫描项目大文件 |
 | `janus.proj.config` | 只读 | 返回项目命令配置 |

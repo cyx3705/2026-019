@@ -32,6 +32,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         // 按类分文件，但注册入口只有这一处。
         DianaKitCommands.Register(registry);
         DianaRelayCommands.Register(registry);
+        DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
 
         registry.Register(new CommandDescriptor
         {

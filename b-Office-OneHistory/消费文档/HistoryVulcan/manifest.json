@@ -1,18 +1,18 @@
 {
     "schemaVersion":  1,
     "module":  "HistoryVulcan",
-    "version":  "3.11.0",
+    "version":  "3.11.1",
     "sourceProject":  "2026-023-HistoryVulcan",
-    "sourceCommit":  "2eb1f326df9b60fb28c61b6644778779ab1076e1",
-    "sourceDirty":  false,
+    "sourceCommit":  "cc901acb93813efd1726520f144a57cf12f9bca6",
+    "sourceDirty":  true,
     "sourceDocumentRoot":  "b-Office/package",
     "artifactSnapshot":  "../../../../2026-023-HistoryVulcan/z-HistoryVulcan",
-    "generatedAtUtc":  "2026-08-12T05:09:42.8749369+00:00",
+    "generatedAtUtc":  "2026-08-12T09:33:09.2010892+00:00",
     "documents":  [
                       {
                           "file":  "HistoryVulcan_API与指令手册.md",
-                          "bytes":  39244,
-                          "sha256":  "1EC21C95E80C7F98A9F97C0C51A502B749D84B186C64CAA33B28791B31A368D2"
+                          "bytes":  39482,
+                          "sha256":  "4F9230903E03EC00A0CACED444594B21D2FFE3E2987D7D0568CE4372C338825E"
                       },
                       {
                           "file":  "HistoryVulcan_UI风格与嵌入页面规范.md",
@@ -26,8 +26,8 @@
                       },
                       {
                           "file":  "HistoryVulcan_消费变更摘要.md",
-                          "bytes":  17725,
-                          "sha256":  "EB059514CB722BADB62ED907471861D46A466C25C816E1F0B56BF8AF7E13C991"
+                          "bytes":  18036,
+                          "sha256":  "38143A2268C486D8FCB7634752546B6B2F72F49C7970793401496D56DBF24484"
                       },
                       {
                           "file":  "HistoryVulcan_运行时约束与已知限制.md",
@@ -41,8 +41,8 @@
                       },
                       {
                           "file":  "复用说明.md",
-                          "bytes":  3061,
-                          "sha256":  "FC075B4B5EBBEAD0825D1B6AD76DED326D66CF90D2FCD28B1D68C4C9D82F4975"
+                          "bytes":  3125,
+                          "sha256":  "988A943BDA41074B9ACCA19C0F196608D870E0A52E709B20AEFFF14E1083B55E"
                       }
                   ]
 }

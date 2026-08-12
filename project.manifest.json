@@ -56,10 +56,10 @@
     "technicalContract": "b-Office-Diana/current/技术合同.md",
     "decisions": "b-Office-Diana/current/有效决策.md",
     "verification": "b-Office-Diana/current/验证合同.md",
-    "oneHistoryIndex": "b-Office-OneHistory/README.md",
+    "oneHistoryIndex": "b-Office-OneHistory/文档中心.md",
     "oneHistoryDefinitions": "b-Office-OneHistory/定义/OneHistory总览.md",
     "oneHistoryNaming": "b-Office-OneHistory/定义/目录与命名规范.md",
-    "consumerIndex": "b-Office-OneHistory/消费文档索引.md"
+    "consumerIndex": "b-Office-OneHistory/文档中心.md"
   },
   "contract": {
     "requiredFiles": [
@@ -96,8 +96,8 @@
     },
     {
       "name": "HistoryVulcan",
-      "version": "3.11.0",
-      "purpose": "宿主 Core 契约与指令总线；从 2026-023-HistoryVulcan/z-HistoryVulcan 消费"
+      "version": "3.11.1",
+      "purpose": "正式运行与开发均对齐 2026-023-HistoryVulcan 3.11.1"
     },
     {
       "name": "HistoryMinerva",
@@ -111,8 +111,8 @@
     },
     {
       "name": "HistoryMercury",
-      "version": "4.3.1",
-      "purpose": "集中发布模块；源码与测试仍由 2026-021-HistoryMercury 拥有"
+      "version": "4.4.0",
+      "purpose": "正式模块与开发均对齐 4.4.0；源码与测试仍由 2026-021-HistoryMercury 拥有"
     }
   ],
   "contextExclusions": [

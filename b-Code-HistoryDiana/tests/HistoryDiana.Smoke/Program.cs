@@ -51,7 +51,8 @@ try
         new[]
         {
             "diana.kit.base64", "diana.kit.guid", "diana.kit.now", "diana.kit.sha256",
-            "diana.project.largest", "diana.project.recent", "diana.project.summary",
+            "diana.project.align", "diana.project.docs", "diana.project.largest",
+            "diana.project.manifest", "diana.project.recent", "diana.project.summary",
             "diana.relay.call", "diana.relay.describe", "diana.relay.list",
         },
         descriptors.Select(descriptor => descriptor.Name).ToArray(),
@@ -88,6 +89,11 @@ try
     True(largest.Success, "largest 命令执行");
     True(summary.Data is not null && recent.Data is not null && largest.Data is not null,
         "命令必须返回结构化结果");
+
+    var manifest = await bus.ExecuteAsync($"diana.project.manifest name={projectName}", "smoke");
+    True(!manifest.Success, "没有 manifest 的已登记工作树必须明确失败");
+    var alignment = await bus.ExecuteAsync("diana.project.align", "smoke");
+    True(alignment.Success && alignment.Data is not null, "四项目对齐命令执行并返回结构化结果");
 
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
         "程序集不得保留 ProjectPulse 类型");
