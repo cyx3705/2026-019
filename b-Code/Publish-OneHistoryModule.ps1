@@ -505,10 +505,22 @@ try {
                     Start-Sleep -Milliseconds 500
                 }
             }
-            $formalBackedUp = $true
+            if ($moved) {
+                $formalBackedUp = $true
+            } else {
+                # Windows may keep a directory handle open after the host exits. Preserve
+                # the atomic path when possible; otherwise sync the already-verified stage
+                # in place and validate the complete snapshot before continuing.
+                Write-Warning "正式目录无法重命名，改用已验证候选的原地同步：$formalRoot"
+                Copy-Item -LiteralPath (Join-Path $formalStage '*') -Destination $formalRoot -Recurse -Force
+                Assert-ModuleSnapshot $formalRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+                $formalPromoted = $true
+            }
         }
-        Move-Item -LiteralPath $formalStage -Destination $formalRoot
-        $formalPromoted = $true
+        if (-not $formalPromoted) {
+            Move-Item -LiteralPath $formalStage -Destination $formalRoot
+            $formalPromoted = $true
+        }
         Assert-ModuleSnapshot $formalRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
 
         if (Test-Path -LiteralPath $documentMirrorRoot) {
