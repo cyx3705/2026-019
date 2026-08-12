@@ -3,16 +3,16 @@
     "module":  "HistoryVulcan",
     "version":  "3.11.2",
     "sourceProject":  "2026-023-HistoryVulcan",
-    "sourceCommit":  "8e6214791fd909d0fd8c77742b421aeff309508e",
+    "sourceCommit":  "ef1fccf9601271c078a7416c52c6917f96b833ee",
     "sourceDirty":  false,
     "sourceDocumentRoot":  "b-Office/package",
     "artifactSnapshot":  "../../../../2026-023-HistoryVulcan/z-HistoryVulcan",
-    "generatedAtUtc":  "2026-08-12T14:19:15.8737713+00:00",
+    "generatedAtUtc":  "2026-08-12T14:42:14.6106073+00:00",
     "documents":  [
                       {
                           "file":  "HistoryVulcan_API与指令手册.md",
-                          "bytes":  39518,
-                          "sha256":  "4A6B2B74163A8DADC62E94D610773085E75CBF6D90D3508C26B830218F046F79"
+                          "bytes":  39476,
+                          "sha256":  "E3EE69D169661B0141FEE1408D71BAE45B9DF7E3321843C41337DDD2B8FAB2CE"
                       },
                       {
                           "file":  "HistoryVulcan_UI风格与嵌入页面规范.md",
