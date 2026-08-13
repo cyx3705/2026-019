@@ -1,13 +1,13 @@
 {
     "schemaVersion":  1,
     "module":  "HistoryVulcan",
-    "version":  "3.11.2",
+    "version":  "3.11.3",
     "sourceProject":  "2026-023-HistoryVulcan",
-    "sourceCommit":  "ef1fccf9601271c078a7416c52c6917f96b833ee",
+    "sourceCommit":  "a9a7fc3bab16ce2e0946eb071a8250a918d39cec",
     "sourceDirty":  false,
     "sourceDocumentRoot":  "b-Office/package",
     "artifactSnapshot":  "../../../../2026-023-HistoryVulcan/z-HistoryVulcan",
-    "generatedAtUtc":  "2026-08-12T14:42:14.6106073+00:00",
+    "generatedAtUtc":  "2026-08-13T02:23:39.5387648+00:00",
     "documents":  [
                       {
                           "file":  "HistoryVulcan_API与指令手册.md",
@@ -16,13 +16,13 @@
                       },
                       {
                           "file":  "HistoryVulcan_UI风格与嵌入页面规范.md",
-                          "bytes":  9070,
-                          "sha256":  "324C5B4988BBFE23A1F300449C7319589FEFC09E08229DE3B58136298AB97E99"
+                          "bytes":  10293,
+                          "sha256":  "A63DB018DEC8CFB2D928A0A59122C2CC07083917135C36AA2D3FB0AF24E788F9"
                       },
                       {
                           "file":  "HistoryVulcan_模块与MCP接入.md",
-                          "bytes":  12747,
-                          "sha256":  "12EE80A14AE1DE6D7D38BE0F7348AA93E72AF062278314DCFF868D12A0457E47"
+                          "bytes":  13598,
+                          "sha256":  "C6C2754320C3573D396764B7FB8605C254DEAF8404AE3594F20FC00E845EA83F"
                       },
                       {
                           "file":  "HistoryVulcan_消费变更摘要.md",
