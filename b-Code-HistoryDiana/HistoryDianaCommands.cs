@@ -28,11 +28,14 @@ public sealed class HistoryDianaCommands : IModuleContextAware
 
     private void RegisterCommands(CommandRegistry registry)
     {
+        var settings = _settings
+            ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
         // 工具箱的另外两类：kit（哈希/编码/标识/时间）与 relay（MCP 工具中继）。
-        // 按类分文件，但注册入口只有这一处。
+        // 按类分文件，但注册入口只有这一处。docs 通道按现场 z-* 扫描登记。
         DianaKitCommands.Register(registry);
         DianaRelayCommands.Register(registry);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
+        DianaZDocCommands.Register(registry, settings);
 
         registry.Register(new CommandDescriptor
         {

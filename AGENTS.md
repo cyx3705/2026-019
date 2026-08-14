@@ -8,7 +8,8 @@
 2. 读取根目录 `README.md` 和 `b-Office-Diana/current/项目概览.md`。
 3. 根据任务读取 `b-Office-Diana/current/技术合同.md`、`有效决策.md` 或 `验证合同.md`；涉及目录治理时
    读取 `b-Office-Diana/文档中心.md` 的“目录规范”，涉及跨项目复用时再读取
-   `b-Office-Diana/package/复用说明.md`。
+   `b-Office-Diana/package/复用说明.md`。跨项目说明书不要打开别的 worktree、也不要读手写文件表：
+   先执行 `diana.docs.catalog`，把完整输出留在本对话中，再调用其中一条 `diana.docs.<通道>`。
 4. 只进入 manifest 声明的活动目录。发现未登记目录时，先确认其级别、所有者和用途。
 
 ## 真值与冲突处理

@@ -85,10 +85,11 @@ HistoryVulcan（宿主进程）
 宿主的模块发现只扫描各项目下的 `z-*` 目录，因此
 **发布到 z 就等于部署**（Janus 例外，它另外还要同步到宿主的模块槽）。
 
-- `z-HistoryVulcan`：宿主自身的正式快照，`host/` 下是可执行文件。
-- `z-HistoryJanus` / `z-HistoryMercury` / `z-HistoryDiana`：各模块的正式快照，
-  内容恒为 `<模块>.dll`、`<模块>.xml`、`module.manifest.json`、`SHA256SUMS`。
+- `z-HistoryVulcan`：宿主自身的正式快照，`host/` 下是可执行文件，已发布说明书在 `docs/`。
+- `z-HistoryJanus` / `z-HistoryMercury` / `z-HistoryDiana` / `z-HistoryMinerva`：各模块的正式快照，
+  运行文件为 `<模块>.dll`、`<模块>.xml`、`module.manifest.json`、`SHA256SUMS`，已发布 Markdown 在 `docs/`。
 - 同名模块出现在多个 z 目录时，**所有同名候选一起被跳过**，不是取其一。
+- 跨项目读说明书：先执行 `diana.docs.catalog` 把索引留在对话中，再选一条 `diana.docs.<域>`。
 
 ### 体系边界：哪些项目不属于 OneHistory
 

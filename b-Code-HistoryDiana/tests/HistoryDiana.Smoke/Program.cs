@@ -21,6 +21,18 @@ try
     File.WriteAllText(Path.Combine(worktreeDirectory, ".git"), $"gitdir: {gitDirectory}");
     File.WriteAllText(Path.Combine(worktreeDirectory, "sample.txt"), "HistoryDiana smoke test");
 
+    var channelProject = Path.Combine(temporaryRoot, "2026-020-HistoryJanus");
+    var channelPackage = Path.Combine(channelProject, "z-HistoryJanus");
+    Directory.CreateDirectory(Path.Combine(channelPackage, "docs"));
+    var apiPath = Path.Combine(channelPackage, "docs", "模块API.md");
+    File.WriteAllText(apiPath, "# Janus API\nsmoke");
+    File.WriteAllText(Path.Combine(channelPackage, "module.manifest.json"),
+        """
+        {"schemaVersion":1,"type":"HistoryVulcan.Module","name":"HistoryJanus","version":"9.9.9","artifact":"HistoryJanus.dll","ui":false}
+        """);
+    var apiHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(apiPath)));
+    File.WriteAllText(Path.Combine(channelPackage, "SHA256SUMS"), $"{apiHash}  docs/模块API.md{Environment.NewLine}");
+
     var registry = new CommandRegistry();
     var log = new TestLog();
     var bus = new CommandBus(registry, log);
@@ -41,30 +53,34 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.0.0", moduleInfos[0].Version, "模块版本");
+    Equal("1.1.0", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
         .OrderBy(descriptor => descriptor.Name, StringComparer.Ordinal)
         .ToList();
-    SequenceEqual(
-        new[]
+    var names = descriptors.Select(descriptor => descriptor.Name).ToArray();
+    foreach (var required in new[]
         {
             "diana.kit.base64", "diana.kit.guid", "diana.kit.now", "diana.kit.sha256",
             "diana.project.align", "diana.project.docs", "diana.project.largest",
             "diana.project.manifest", "diana.project.recent", "diana.project.summary",
             "diana.relay.call", "diana.relay.describe", "diana.relay.list",
-        },
-        descriptors.Select(descriptor => descriptor.Name).ToArray(),
-        "命令必须使用 Diana 三段式命名");
+            "diana.docs.catalog", "diana.docs.janus",
+        })
+    {
+        True(names.Contains(required), $"缺少命令 {required}");
+    }
+    True(names.All(name => name.StartsWith("diana.", StringComparison.Ordinal)),
+        "不得保留 StudioTools 或 ProjectPulse 命令前缀");
     True(descriptors.All(descriptor => descriptor.Domain == "HistoryDiana"), "命令域必须归属 HistoryDiana");
     SequenceEqual(
-        new[] { "kit", "project", "relay" },
+        new[] { "docs", "kit", "project", "relay" },
         descriptors.Select(descriptor => descriptor.CommandClass!)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray(),
-        "Diana 只有 kit / project / relay 三个类");
+        "Diana 只有 docs / kit / project / relay 四个类");
     commandCount = descriptors.Count;
     classCount = descriptors.Select(descriptor => descriptor.CommandClass!)
         .Distinct(StringComparer.Ordinal)
@@ -74,8 +90,6 @@ try
         descriptors.Where(descriptor => descriptor.Name != "diana.relay.call")
             .All(descriptor => descriptor.Readonly),
         "除 diana.relay.call 外所有 Diana 命令必须声明为只读");
-    True(descriptors.All(descriptor => descriptor.Name.StartsWith("diana.", StringComparison.Ordinal)),
-        "不得保留 StudioTools 或 ProjectPulse 命令前缀");
 
     Equal(null, bus.Validate($"diana.project.summary name={projectName}"), "summary 命令校验");
     Equal(null, bus.Validate($"diana.project.recent name={projectName} days=1 limit=10"), "recent 命令校验");
@@ -94,6 +108,18 @@ try
     True(!manifest.Success, "没有 manifest 的已登记工作树必须明确失败");
     var alignment = await bus.ExecuteAsync("diana.project.align", "smoke");
     True(alignment.Success && alignment.Data is not null, "四项目对齐命令执行并返回结构化结果");
+
+    var catalog = await bus.ExecuteAsync("diana.docs.catalog", "smoke");
+    True(catalog.Success, "docs catalog 必须成功");
+    True(catalog.Message.Contains("diana.docs.janus", StringComparison.Ordinal),
+        "索引必须把通道命令显式写进对话文本");
+    var listed = await bus.ExecuteAsync("diana.docs.janus", "smoke");
+    True(listed.Success && listed.Message.Contains("docs/模块API.md", StringComparison.Ordinal),
+        "通道省略 file 时只列出本通道文档");
+    var opened = await bus.ExecuteAsync("diana.docs.janus file=docs/模块API.md", "smoke");
+    True(opened.Success, "通道按 file 读取 z 内 Markdown");
+    var escaped = await bus.ExecuteAsync("diana.docs.janus file=../secret.md", "smoke");
+    True(!escaped.Success, "通道必须拒绝越出 z 的路径");
 
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
         "程序集不得保留 ProjectPulse 类型");

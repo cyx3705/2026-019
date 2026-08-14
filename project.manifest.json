@@ -15,7 +15,7 @@
       "documentation"
     ],
     "status": "active",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "branch": "2026-019-HistoryDiana"
   },
   "paths": {
@@ -33,8 +33,7 @@
     "generatedRoots": [
       "b-Code-HistoryDiana/bin",
       "b-Code-HistoryDiana/obj",
-      "b-Publish/current",
-      "b-Office-OneHistory/消费文档"
+      "b-Publish/current"
     ],
     "archiveRoots": [
       "b-Office-Diana/history",

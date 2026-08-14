@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$Module,
     [switch]$Publish,
-    [switch]$AllowDirtySource
+    [switch]$AllowDirtySource,
+    [switch]$RequireCleanSource
 )
 
 $ErrorActionPreference = 'Stop'
@@ -118,23 +119,55 @@ function Repair-VulcanAutostart {
     }
 }
 
-function Stop-VulcanFormalProcesses {
-    param([Parameter(Mandatory = $true)][string]$ModuleRoot)
+function Get-VulcanHostRoot {
+    $path = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-HistoryVulcan'
+    if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+        return $null
+    }
+    return Assert-ChildPath $path $projectsRoot 'Vulcan host snapshot'
+}
 
-    $formalRoot = [IO.Path]::GetFullPath($ModuleRoot).TrimEnd('\') + '\'
-    $hostExecutable = [IO.Path]::GetFullPath((Join-Path $ModuleRoot 'host\HistoryVulcan.exe'))
+function Get-VulcanFormalExecutable {
+    $moduleRoot = Get-VulcanHostRoot
+    if ([string]::IsNullOrWhiteSpace($moduleRoot)) {
+        return $null
+    }
+    $formalRoot = [IO.Path]::GetFullPath($moduleRoot).TrimEnd('\') + '\'
+    $hostExecutable = [IO.Path]::GetFullPath((Join-Path $moduleRoot 'host\HistoryVulcan.exe'))
     if (-not $hostExecutable.StartsWith($formalRoot, [StringComparison]::OrdinalIgnoreCase)) {
         throw "HistoryVulcan formal executable escaped the formal root: $hostExecutable"
     }
+    return $hostExecutable
+}
 
+function Get-VulcanFormalProcesses {
+    $hostExecutable = Get-VulcanFormalExecutable
+    if ([string]::IsNullOrWhiteSpace($hostExecutable) -or
+        -not (Test-Path -LiteralPath $hostExecutable -PathType Leaf)) {
+        return @()
+    }
+
+    return @(Get-CimInstance Win32_Process -Filter "Name='HistoryVulcan.exe'" |
+        Where-Object {
+            -not [string]::IsNullOrWhiteSpace([string]$_.ExecutablePath) -and
+            [IO.Path]::GetFullPath([string]$_.ExecutablePath).Equals(
+                $hostExecutable,
+                [StringComparison]::OrdinalIgnoreCase)
+        })
+}
+
+function Test-VulcanFormalProcessRunning {
+    return (Get-VulcanFormalProcesses).Count -gt 0
+}
+
+function Stop-VulcanFormalProcesses {
+    $hostExecutable = Get-VulcanFormalExecutable
+    if ([string]::IsNullOrWhiteSpace($hostExecutable)) {
+        Write-Host 'HistoryVulcan 正式宿主快照不存在，跳过停进程'
+        return
+    }
     for ($attempt = 0; $attempt -lt 3; $attempt++) {
-        $targets = @(Get-CimInstance Win32_Process -Filter "Name='HistoryVulcan.exe'" |
-            Where-Object {
-                -not [string]::IsNullOrWhiteSpace([string]$_.ExecutablePath) -and
-                [IO.Path]::GetFullPath([string]$_.ExecutablePath).Equals(
-                    $hostExecutable,
-                    [StringComparison]::OrdinalIgnoreCase)
-            })
+        $targets = @(Get-VulcanFormalProcesses)
         if ($targets.Count -eq 0) {
             Write-Host 'HistoryVulcan 正式宿主进程已停止，可安全提升快照'
             return
@@ -146,15 +179,113 @@ function Stop-VulcanFormalProcesses {
         Start-Sleep -Milliseconds 300
     }
 
-    $remaining = @(Get-CimInstance Win32_Process -Filter "Name='HistoryVulcan.exe'" |
-        Where-Object {
-            -not [string]::IsNullOrWhiteSpace([string]$_.ExecutablePath) -and
-            [IO.Path]::GetFullPath([string]$_.ExecutablePath).Equals(
-                $hostExecutable,
-                [StringComparison]::OrdinalIgnoreCase)
-        })
+    $remaining = @(Get-VulcanFormalProcesses)
     if ($remaining.Count -gt 0) {
         throw "HistoryVulcan 正式宿主仍在运行，拒绝移动正式快照：$($remaining.ProcessId -join ', ')"
+    }
+}
+
+function Invoke-VulcanLiveCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [int]$TimeoutSeconds = 120
+    )
+
+    if (-not (Test-VulcanFormalProcessRunning)) {
+        return $false
+    }
+
+    $endpointPath = Join-Path $env:APPDATA 'HistoryVulcan\service\endpoint.json'
+    if (-not (Test-Path -LiteralPath $endpointPath -PathType Leaf)) {
+        Write-Warning "正式宿主在运行，但找不到服务端点 $endpointPath，无法热重载"
+        return $false
+    }
+
+    $endpoint = [IO.File]::ReadAllText($endpointPath, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
+    $port = [int]$endpoint.port
+    $processId = [int]$endpoint.processId
+    if ($port -lt 1024 -or $port -gt 65535) {
+        Write-Warning "正式宿主端点端口无效：$port"
+        return $false
+    }
+    if ($processId -gt 0) {
+        $running = @(Get-VulcanFormalProcesses | Where-Object { $_.ProcessId -eq $processId })
+        if ($running.Count -eq 0) {
+            Write-Warning "endpoint.json 指向的服务进程 $processId 不是当前正式宿主，跳过热重载"
+            return $false
+        }
+    }
+
+    $uri = "http://127.0.0.1:$port/api/command"
+    $headers = @{
+        'X-HistoryVulcan-Client' = 'Shell'
+        'X-Client-Name' = 'Publish-OneHistoryModule'
+        'X-Session-Id' = [Guid]::NewGuid().ToString('N')
+    }
+    $body = (@{ text = $Text; source = 'publish' } | ConvertTo-Json -Compress)
+    try {
+        $response = Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json; charset=utf-8' `
+            -Headers $headers -TimeoutSec $TimeoutSeconds
+    }
+    catch {
+        Write-Warning "向正式宿主发送 $Text 失败：$($_.Exception.Message)"
+        return $false
+    }
+
+    $success = $false
+    if ($null -ne $response.success) { $success = [bool]$response.success }
+    elseif ($null -ne $response.Success) { $success = [bool]$response.Success }
+    if (-not $success) {
+        $message = [string]$response.message
+        if ([string]::IsNullOrWhiteSpace($message)) { $message = [string]$response.Message }
+        Write-Warning "正式宿主拒绝 $Text：$message"
+        return $false
+    }
+
+    Write-Host "Live host: $Text"
+    return $true
+}
+
+function Sync-FormalSnapshotInPlace {
+    param(
+        [Parameter(Mandatory = $true)][string]$Stage,
+        [Parameter(Mandatory = $true)][string]$FormalRoot
+    )
+
+    $stagePrefix = [IO.Path]::GetFullPath($Stage).TrimEnd('\') + '\'
+    $files = @(Get-ChildItem -LiteralPath $Stage -File -Recurse)
+    if ($files.Count -eq 0) {
+        throw "In-place snapshot stage is empty: $Stage"
+    }
+
+    $stageKeys = @{}
+    $checksum = $null
+    foreach ($file in $files) {
+        $key = $file.FullName.Substring($stagePrefix.Length)
+        if ($file.Name -eq 'SHA256SUMS') {
+            $checksum = $file
+            continue
+        }
+        $stageKeys[$key] = $true
+        $destination = Join-Path $FormalRoot $key
+        $directory = Split-Path -Parent $destination
+        if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+            New-Item -ItemType Directory -Force -Path $directory | Out-Null
+        }
+        Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+    }
+    if ($null -ne $checksum) {
+        $key = $checksum.FullName.Substring($stagePrefix.Length)
+        $stageKeys[$key] = $true
+        Copy-Item -LiteralPath $checksum.FullName -Destination (Join-Path $FormalRoot $key) -Force
+    }
+
+    $formalPrefix = [IO.Path]::GetFullPath($FormalRoot).TrimEnd('\') + '\'
+    foreach ($existing in @(Get-ChildItem -LiteralPath $FormalRoot -File -Recurse)) {
+        $key = $existing.FullName.Substring($formalPrefix.Length)
+        if (-not $stageKeys.ContainsKey($key)) {
+            Remove-Item -LiteralPath $existing.FullName -Force
+        }
     }
 }
 
@@ -257,72 +388,58 @@ function Assert-ModuleSnapshot {
     }
 }
 
-function New-ConsumerDocumentMirror {
+function Get-ChecksumMarker {
+    param([Parameter(Mandatory = $true)][string]$SumsPath)
+
+    if (Test-Path -LiteralPath $SumsPath -PathType Leaf) {
+        foreach ($line in [IO.File]::ReadAllLines($SumsPath, [Text.UTF8Encoding]::new($false))) {
+            if ($line -match '^[0-9A-Fa-f]{64} \*') { return ' *' }
+            if ($line -match '^[0-9A-Fa-f]{64}  ') { return '  ' }
+        }
+    }
+    return '  '
+}
+
+function Write-SnapshotChecksums {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $rootPrefix = [IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
+    $sumsPath = Join-Path $Root 'SHA256SUMS'
+    $marker = Get-ChecksumMarker $sumsPath
+    $files = @(Get-ChildItem -LiteralPath $Root -File -Recurse |
+        Where-Object Name -ne 'SHA256SUMS' |
+        Sort-Object FullName)
+    if ($files.Count -eq 0) {
+        throw "Snapshot has no files to checksum: $Root"
+    }
+    $lines = foreach ($file in $files) {
+        $key = $file.FullName.Substring($rootPrefix.Length).Replace('\', '/')
+        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
+        "$hash$marker$key"
+    }
+    [IO.File]::WriteAllLines($sumsPath, $lines, [Text.UTF8Encoding]::new($false))
+}
+
+function Merge-PackageDocumentsIntoSnapshot {
     param(
-        [string]$SourceRoot,
-        [string]$Destination,
-        [string]$ModuleName,
-        [string]$Version,
-        [string]$ProjectDirectory,
-        [string]$SourceCommit,
-        [bool]$SourceDirty
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$SnapshotRoot
     )
 
+    if (-not (Test-Path -LiteralPath $SourceRoot -PathType Container)) {
+        throw "Package document source is missing: $SourceRoot"
+    }
     $documents = @(Get-ChildItem -LiteralPath $SourceRoot -Filter '*.md' -File | Sort-Object Name)
     if ($documents.Count -eq 0) {
         throw "No consumer Markdown documents found: $SourceRoot"
     }
 
-    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-    $entries = foreach ($document in $documents) {
-        $target = Join-Path $Destination $document.Name
-        Copy-Item -LiteralPath $document.FullName -Destination $target
-        [ordered]@{
-            file = $document.Name
-            bytes = (Get-Item -LiteralPath $target).Length
-            sha256 = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToUpperInvariant()
-        }
+    $docsRoot = Join-Path $SnapshotRoot 'docs'
+    New-Item -ItemType Directory -Force -Path $docsRoot | Out-Null
+    foreach ($document in $documents) {
+        Copy-Item -LiteralPath $document.FullName -Destination (Join-Path $docsRoot $document.Name) -Force
     }
-
-    $mirrorManifest = [ordered]@{
-        schemaVersion = 1
-        module = $ModuleName
-        version = $Version
-        sourceProject = $ProjectDirectory
-        sourceCommit = $SourceCommit
-        sourceDirty = $SourceDirty
-        sourceDocumentRoot = 'b-Office/package'
-        artifactSnapshot = "../../../../$ProjectDirectory/z-$ModuleName"
-        generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
-        documents = @($entries)
-    }
-    [IO.File]::WriteAllText(
-        (Join-Path $Destination 'manifest.json'),
-        ($mirrorManifest | ConvertTo-Json -Depth 8) + [Environment]::NewLine,
-        [Text.UTF8Encoding]::new($false))
-}
-
-function Assert-ConsumerDocumentMirror {
-    param([string]$Root, [string]$ExpectedModule, [string]$ExpectedVersion)
-
-    $manifestPath = Join-Path $Root 'manifest.json'
-    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
-        throw "Consumer document mirror manifest is missing: $Root"
-    }
-    $manifest = [IO.File]::ReadAllText($manifestPath, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
-    if ($manifest.module -ne $ExpectedModule -or $manifest.version -ne $ExpectedVersion) {
-        throw "Consumer document mirror identity mismatch: $Root"
-    }
-    foreach ($document in @($manifest.documents)) {
-        $path = Join-Path $Root ([string]$document.file)
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-            throw "Mirrored consumer document is missing: $path"
-        }
-        $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToUpperInvariant()
-        if ($actual -ne [string]$document.sha256) {
-            throw "Mirrored consumer document checksum mismatch: $path"
-        }
-    }
+    Write-SnapshotChecksums $SnapshotRoot
 }
 
 function Invoke-ConfiguredModuleValidation {
@@ -390,11 +507,6 @@ $sourceManifestPath = Join-Path $projectRoot $definition.SourceManifest
 $candidateRoot = Assert-ChildPath (Join-Path $projectRoot $definition.CandidateDirectory) $projectRoot 'Candidate directory'
 $formalRoot = Assert-ChildPath (Join-Path $projectRoot $definition.FormalDirectory) $projectRoot 'Formal directory'
 $documentSourceRoot = Join-Path $projectRoot $definition.PackageDocuments
-$consumerDocumentsDirectoryName = -join @(0x6D88, 0x8D39, 0x6587, 0x6863 | ForEach-Object { [char]$_ })
-$documentMirrorRoot = Assert-ChildPath `
-    (Join-Path $dianaRoot "b-Office-OneHistory\$consumerDocumentsDirectoryName\$Module") `
-    $dianaRoot `
-    'Document mirror'
 $moduleVersion = Read-ModuleVersion $versionPropsPath $definition.VersionProperty
 
 # 模块的身份写在三处(版本源、源 manifest、快照 manifest)，这里对齐前两处。
@@ -412,11 +524,14 @@ if ($definition.Kind -eq 'module') {
 $sourceStatus = @(& git -C $projectRoot status --porcelain -- ':!b-Publish/**' ":!$($definition.FormalDirectory)/**")
 if ($LASTEXITCODE -ne 0) { throw "Unable to read Git status: $projectRoot" }
 $sourceDirty = $sourceStatus.Count -gt 0
-if ($sourceDirty -and -not $AllowDirtySource) {
-    throw "Source worktree is dirty. Commit it or explicitly pass -AllowDirtySource:`n$($sourceStatus -join [Environment]::NewLine)"
+if ($sourceDirty -and $RequireCleanSource -and -not $AllowDirtySource) {
+    throw "Source worktree is dirty. Default is deploy-then-commit; pass -RequireCleanSource only when you need a clean HEAD, or omit it and commit source + z together after publish:`n$($sourceStatus -join [Environment]::NewLine)"
 }
 if ($sourceDirty) {
-    Write-Warning "Publishing dirty $Module source because -AllowDirtySource was explicitly supplied."
+    Write-Warning "Publishing $Module from a dirty worktree. Commit source together with z after publish."
+}
+if ($AllowDirtySource) {
+    Write-Warning "-AllowDirtySource is now the default deploy-then-commit path; the switch is kept only for old callers."
 }
 $sourceCommit = (& git -C $projectRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceCommit)) {
@@ -460,14 +575,12 @@ try {
         throw "Unsupported publish kind: $($definition.Kind)"
     }
 
-    $documentStage = Join-Path $workRoot 'consumer-docs'
-    New-ConsumerDocumentMirror $documentSourceRoot $documentStage $Module $moduleVersion `
-        $definition.ProjectDirectory $sourceCommit $sourceDirty
-    Assert-ConsumerDocumentMirror $documentStage $Module $moduleVersion
+    Merge-PackageDocumentsIntoSnapshot $documentSourceRoot $candidateRoot
+    Assert-ModuleSnapshot $candidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
 
     if (-not $Publish) {
         Write-Host "Verified candidate $Module ${moduleVersion}: $candidateRoot"
-        Write-Host 'Pass -Publish to promote the candidate and consumer document mirror.'
+        Write-Host 'Pass -Publish to promote the candidate, including z/docs.'
         return
     }
 
@@ -481,19 +594,34 @@ try {
         $oldVersion = [string](([IO.File]::ReadAllText($formalManifestPath) | ConvertFrom-Json).version)
     }
     $formalBackup = Join-Path $projectRoot "b-Publish\history\$Module\$oldVersion-$stamp-$($transactionId.Substring(0, 8))"
-    $documentBackup = Join-Path $dianaRoot "b-Publish\history\consumer-docs\$Module\$oldVersion-$stamp-$($transactionId.Substring(0, 8))"
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $formalBackup), (Split-Path -Parent $documentBackup), (Split-Path -Parent $documentMirrorRoot) | Out-Null
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $formalBackup) | Out-Null
 
     $formalBackedUp = $false
     $formalPromoted = $false
-    $documentsBackedUp = $false
-    $documentsPromoted = $false
+    $usedInPlacePromote = $false
     try {
+        $liveHost = Test-VulcanFormalProcessRunning
         if ($definition.Kind -eq 'host' -and $Module -eq 'HistoryVulcan' -and
             (Test-Path -LiteralPath $formalRoot)) {
-            Stop-VulcanFormalProcesses $formalRoot
+            Stop-VulcanFormalProcesses
+            $liveHost = $false
         }
-        if (Test-Path -LiteralPath $formalRoot) {
+
+        $promoteInPlace = $definition.Kind -eq 'module' -and $liveHost -and (Test-Path -LiteralPath $formalRoot)
+        if ($promoteInPlace) {
+            Write-Host "正式宿主在运行：模块快照原地覆盖，不关闭 Vulcan、不重命名 z 目录"
+            try {
+                Copy-Item -LiteralPath $formalRoot -Destination $formalBackup -Recurse -ErrorAction Stop
+                $formalBackedUp = $true
+            }
+            catch {
+                Write-Warning "无法把旧模块快照复制到 history，继续原地覆盖：$($_.Exception.Message)"
+            }
+            Sync-FormalSnapshotInPlace $formalStage $formalRoot
+            $formalPromoted = $true
+            $usedInPlacePromote = $true
+        }
+        elseif (Test-Path -LiteralPath $formalRoot) {
             $moved = $false
             for ($attempt = 0; $attempt -lt 5 -and -not $moved; $attempt++) {
                 try {
@@ -509,12 +637,8 @@ try {
             if ($moved) {
                 $formalBackedUp = $true
             } else {
-                # Windows may keep a directory handle open after the host exits. Preserve
-                # the atomic path when possible; otherwise sync the already-verified stage
-                # in place and validate the complete snapshot before continuing.
                 Write-Warning "正式目录无法重命名，改用已验证候选的原地同步：$formalRoot"
-                Copy-Item -LiteralPath (Join-Path $formalStage '*') -Destination $formalRoot -Recurse -Force
-                Assert-ModuleSnapshot $formalRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+                Sync-FormalSnapshotInPlace $formalStage $formalRoot
                 $formalPromoted = $true
             }
         }
@@ -523,39 +647,45 @@ try {
             $formalPromoted = $true
         }
         Assert-ModuleSnapshot $formalRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
-
-        if (Test-Path -LiteralPath $documentMirrorRoot) {
-            Move-Item -LiteralPath $documentMirrorRoot -Destination $documentBackup
-            $documentsBackedUp = $true
-        }
-        Move-Item -LiteralPath $documentStage -Destination $documentMirrorRoot
-        $documentsPromoted = $true
-        Assert-ConsumerDocumentMirror $documentMirrorRoot $Module $moduleVersion
     }
     catch {
-        if ($documentsPromoted -and (Test-Path -LiteralPath $documentMirrorRoot)) {
-            Move-Item -LiteralPath $documentMirrorRoot -Destination (Join-Path $workRoot 'failed-consumer-docs')
+        if ($usedInPlacePromote -and $formalBackedUp -and (Test-Path -LiteralPath $formalBackup)) {
+            Sync-FormalSnapshotInPlace $formalBackup $formalRoot
         }
-        if ($documentsBackedUp -and (Test-Path -LiteralPath $documentBackup)) {
-            Move-Item -LiteralPath $documentBackup -Destination $documentMirrorRoot
-        }
-        if ($formalPromoted -and (Test-Path -LiteralPath $formalRoot)) {
+        elseif ($formalPromoted -and (Test-Path -LiteralPath $formalRoot)) {
             Move-Item -LiteralPath $formalRoot -Destination (Join-Path $workRoot 'failed-formal')
+            if ($formalBackedUp -and (Test-Path -LiteralPath $formalBackup)) {
+                Move-Item -LiteralPath $formalBackup -Destination $formalRoot
+            }
         }
-        if ($formalBackedUp -and (Test-Path -LiteralPath $formalBackup)) {
+        elseif ($formalBackedUp -and (Test-Path -LiteralPath $formalBackup)) {
             Move-Item -LiteralPath $formalBackup -Destination $formalRoot
         }
         throw
     }
 
     Write-Host "Published $Module ${moduleVersion}: $formalRoot"
-    Write-Host "Consumer documents: $documentMirrorRoot"
+    Write-Host "Published documents: $(Join-Path $formalRoot 'docs')"
     if ($formalBackedUp) { Write-Host "Previous formal snapshot: $formalBackup" }
+
+    if ($definition.Kind -eq 'module') {
+        if (Invoke-VulcanLiveCommand 'vulcan.module.reload') {
+            Write-Host '模块已在运行中的宿主热重载，无需关闭 Vulcan'
+        }
+        elseif (Test-VulcanFormalProcessRunning) {
+            Write-Warning '正式宿主仍在运行，但热重载未成功。可在控制台执行 vulcan.module.reload，不要为了换模块而关宿主。'
+        }
+        else {
+            Write-Host '正式宿主未在运行；下次启动会装载新的 z 快照'
+        }
+    }
 
     Update-CommandManual
     if ($definition.Kind -eq 'host' -and $Module -eq 'HistoryVulcan') {
         Repair-VulcanAutostart $formalRoot
     }
+
+    Write-Host "Deploy-then-commit: 现在提交 $projectRoot 的源码与 $($definition.FormalDirectory)。Diana 的命令面总览如有更新一并提交。"
 }
 finally {
     if (Test-Path -LiteralPath $workRoot) {
