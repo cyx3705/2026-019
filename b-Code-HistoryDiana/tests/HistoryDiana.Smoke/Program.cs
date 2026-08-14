@@ -13,12 +13,8 @@ var classCount = 0;
 try
 {
     var projectName = "2026-999-HistoryDianaSmoke";
-    var bareRepository = Path.Combine(temporaryRoot, "HistoryVesta.git");
     var worktreeDirectory = Path.Combine(temporaryRoot, projectName);
-    var gitDirectory = Path.Combine(bareRepository, "worktrees", projectName);
-    Directory.CreateDirectory(gitDirectory);
-    Directory.CreateDirectory(worktreeDirectory);
-    File.WriteAllText(Path.Combine(worktreeDirectory, ".git"), $"gitdir: {gitDirectory}");
+    Directory.CreateDirectory(Path.Combine(worktreeDirectory, ".git"));
     File.WriteAllText(Path.Combine(worktreeDirectory, "sample.txt"), "HistoryDiana smoke test");
 
     var channelProject = Path.Combine(temporaryRoot, "2026-020-HistoryJanus");
@@ -38,8 +34,7 @@ try
     var bus = new CommandBus(registry, log);
     var settings = new TestSettings(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        ["proj.worktreeroot"] = temporaryRoot,
-        ["proj.barerepo"] = bareRepository,
+        ["proj.libraryroot"] = temporaryRoot,
     });
     var context = new TestModuleContext(bus, settings, log, temporaryRoot, registry);
     var commands = new HistoryDianaCommands();
@@ -53,7 +48,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.1.0", moduleInfos[0].Version, "模块版本");
+    Equal("1.2.0", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()

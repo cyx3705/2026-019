@@ -111,8 +111,8 @@ internal static class DianaZDocCommands
 
     private static IReadOnlyList<ZDocChannel> Discover(ISettingsService settings)
     {
-        var rootValue = settings.Get("proj.worktreeroot");
-        if (string.IsNullOrWhiteSpace(rootValue) || !Directory.Exists(rootValue))
+        var rootValue = DianaLibraryRoot.Resolve(settings);
+        if (!Directory.Exists(rootValue))
             return [];
 
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootValue));

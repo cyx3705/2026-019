@@ -10,6 +10,14 @@
             而不是按 text / identity / time 各开一个只有一两条命令的类。
             </summary>
         </member>
+        <member name="T:HistoryDiana.DianaLibraryRoot">
+            <summary>
+            项目库根：一项目一仓的 HistoryClio。旧 Vesta 配置改写到 Clio。
+            </summary>
+        </member>
+        <member name="T:HistoryDiana.DianaProjectAlignmentCommands">
+            <summary>Provides read-only project manifest, current-document, and cross-project alignment views.</summary>
+        </member>
         <member name="T:HistoryDiana.DianaRelayCommands">
             <summary>
             MCP 工具中继：按 OneHistory 当前的 MCP 策略实时列举、查看和调用工具。
@@ -18,6 +26,11 @@
             存在的理由是快照过期问题——AI 会话持有的工具目录是任务开始时的旧快照，
             模块热重载后就与实际可见工具不一致。这里每次都现查现调，绕开那份旧快照。
             </remarks>
+        </member>
+        <member name="T:HistoryDiana.DianaZDocCommands">
+            <summary>
+            跨项目说明书只从各项目 <c>z-*</c> 读取。现场扫描生成通道，避免手维护清单漂移。
+            </summary>
         </member>
         <member name="T:HistoryDiana.HistoryDianaCommands">
             <summary>Registers the HistoryDiana read-only worktree inspection commands.</summary>
@@ -29,11 +42,6 @@
             <summary>
             从 command_list 的行数组提取模块工具名。structuredContent 优先路径与
             content 回退路径共用本函数,确保两条路径解析逻辑不漂移。
-            </summary>
-        </member>
-        <member name="T:BaseVariable.ModuleInfoBase">
-            <summary>
-            HistoryVulcan 模块契约副本。宿主按基类全名 BaseVariable.ModuleInfoBase 做鸭子类型识别。
             </summary>
         </member>
     </members>

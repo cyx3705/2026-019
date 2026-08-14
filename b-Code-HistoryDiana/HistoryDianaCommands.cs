@@ -312,44 +312,21 @@ public sealed class HistoryDianaCommands : IModuleContextAware
 
         var settings = _settings
             ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
-        var rootValue = settings.Get("proj.worktreeroot");
-        var bareRepoValue = settings.Get("proj.barerepo");
-
-        if (string.IsNullOrWhiteSpace(rootValue))
-            throw new InvalidOperationException("HistoryVulcan 设置缺少 proj.worktreeroot；请先配置 HistoryJanus 项目库。");
-        if (string.IsNullOrWhiteSpace(bareRepoValue))
-            throw new InvalidOperationException("HistoryVulcan 设置缺少 proj.barerepo；请先配置 HistoryJanus 项目库。");
+        var rootValue = DianaLibraryRoot.Resolve(settings);
+        if (!Directory.Exists(rootValue))
+            throw new InvalidOperationException("HistoryVulcan 设置缺少有效的 proj.libraryroot；请先配置 HistoryJanus 项目库。");
 
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootValue));
         var candidate = Path.GetFullPath(Path.Combine(root, projectName));
         var parent = Directory.GetParent(candidate)?.FullName;
         if (!string.Equals(parent, root, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("目标越出 HistoryVesta 工作树根，已拒绝");
+            throw new InvalidOperationException("目标越出 HistoryClio 项目库根，已拒绝");
         if (!Directory.Exists(candidate))
-            throw new DirectoryNotFoundException($"工作树不存在: {projectName}");
+            throw new DirectoryNotFoundException($"项目不存在: {projectName}");
         if ((File.GetAttributes(candidate) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidOperationException($"工作树根是重解析点，已拒绝: {projectName}");
-
-        var gitMarker = Path.Combine(candidate, ".git");
-        if (!File.Exists(gitMarker))
-            throw new InvalidOperationException($"目录不是已登记 Git 工作树: {projectName}");
-
-        var marker = File.ReadAllText(gitMarker).Trim();
-        const string prefix = "gitdir:";
-        if (!marker.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"工作树 .git 指针格式无效: {projectName}");
-
-        var gitDirText = marker[prefix.Length..].Trim();
-        var gitDir = Path.GetFullPath(Path.IsPathRooted(gitDirText)
-            ? gitDirText
-            : Path.Combine(candidate, gitDirText));
-        var managedWorktrees = Path.GetFullPath(Path.Combine(bareRepoValue, "worktrees"));
-        if (!gitDir.StartsWith(managedWorktrees + Path.DirectorySeparatorChar,
-                StringComparison.OrdinalIgnoreCase)
-            || !Directory.Exists(gitDir))
-        {
-            throw new InvalidOperationException($"目录未登记在 HistoryVesta 共享裸仓库中: {projectName}");
-        }
+            throw new InvalidOperationException($"项目根是重解析点，已拒绝: {projectName}");
+        if (!DianaLibraryRoot.IsGitProject(candidate))
+            throw new InvalidOperationException($"目录不是独立 Git 仓库: {projectName}");
 
         return candidate;
     }

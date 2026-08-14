@@ -7,8 +7,8 @@
 
 ```
 OneHistory                      产品族名，也是品牌前缀 History* 的来源
-└── HistoryVesta                项目库（一个 git 裸仓 + 一堆 worktree）
-    ├── 2026-019-HistoryDiana   项目（= worktree = 分支）
+└── HistoryClio                 项目库（每个编号目录是独立 git 仓）
+    ├── 2026-019-HistoryDiana   项目
     ├── 2026-020-HistoryJanus   项目
     ├── 2026-021-HistoryMercury 项目
     ├── 2026-023-HistoryVulcan  项目（其产物是宿主）
@@ -28,20 +28,21 @@ HistoryVulcan（宿主进程）
 
 ## 定义
 
-### 项目库（HistoryVesta）
+### 项目库（HistoryClio）
 
-一个 git **裸仓** `HistoryVesta.git` 加上同级的一批 **worktree** 目录。
-每个 worktree 是一个项目，目录名与分支名同名。
+每个编号项目目录是一个**独立 git 仓库**（目录内有 `.git` 文件夹），默认分支 `main`。
+目录名就是项目身份。不再使用共享裸仓 `HistoryVesta.git` 或 worktree 指针文件。
 
-- 路径：`C:\OneHistory\HistoryVesta`
-- 裸仓：`HistoryVesta.git`，worktree 管理目录在 `HistoryVesta.git/worktrees/<分支名>`
-- 项目目录改名时必须同步三处：目录本身、`worktrees/<名>` 管理目录、
-  worktree 内 `.git` 文件里的 `gitdir:` 指针。少改一处 git 就找不到工作树。
-  推荐用 `git worktree move` + `git worktree repair`，不要手工只改目录名。
+- 路径：`C:\OneHistory\HistoryClio`
+- 设置键：`proj.libraryroot`（旧 `proj.worktreeroot` 仅作一次性迁移；等于
+  `C:\OneHistory\HistoryVesta` 时改写到 Clio）
+- 模板项目：`0000-000-Template`（`proj.basebranch`）
+- 已退役的共享库：`C:\OneHistory\HistoryVesta` 与 `HistoryVesta.git`。残留的
+  `.git` 指针文件只诊断，不自动删除。
 
 ### 项目
 
-一个 worktree = 一个分支 = 一个编号目录，命名 `<年>-<编号>-<名>`（例如 `2026-020-HistoryJanus`）。
+一个独立仓 = 一个编号目录，命名 `<年>-<编号>-<名>`（例如 `2026-020-HistoryJanus`）。
 项目是**版本与发布的单位**：每个项目有自己的版本源、自己的门禁、自己的 z 快照。
 
 不是所有项目都产出模块。有的项目是纯资料或实验，不参与运行期。
@@ -93,7 +94,7 @@ HistoryVulcan（宿主进程）
 
 ### 体系边界：哪些项目不属于 OneHistory
 
-项目库 `HistoryVesta` 里有很多 worktree，但**只有下列项目属于 OneHistory 体系**、
+项目库 `HistoryClio` 里有很多编号项目，但**只有下列项目属于 OneHistory 体系**、
 需要跟进宿主契约与跨项目规范：
 
 | 项目 | 角色 |
@@ -109,7 +110,7 @@ HistoryVulcan（宿主进程）
 集中发布与门禁；宿主侧的破坏性变更**不需要**为它保留兼容路径，
 评估影响面时也不必把它算进去。不要再在决策、影响面或待办里提到它。
 
-其余编号 worktree（各类课程设计、实验项目等）从来就不在体系内，同理。
+其余编号项目（各类课程设计、实验项目等）从来就不在体系内，同理。
 
 ### 项目内目录前缀
 
