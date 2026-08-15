@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "type": "HistoryVulcan.Module",
   "name": "HistoryDiana",
-  "version": "1.8.0",
+  "version": "1.9.1",
   "description": "OneHistory AI 工作区工具箱：工作树巡检、小工具与 MCP 工具中继。",
   "artifact": "HistoryDiana.dll",
   "docs": "HistoryDiana.xml",

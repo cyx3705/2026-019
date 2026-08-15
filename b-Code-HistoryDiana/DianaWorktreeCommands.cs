@@ -49,14 +49,18 @@ internal static class DianaWorktreeCommands
             Parameters =
             [
                 Text("project", "项目目录名，例如 2026-020-HistoryJanus", required: true, position: 0),
-                Text("slug", "本次改动的短标识，只用小写字母数字和连字符", required: true, position: 1),
+                Text("slug", "本工作区要解决的问题，短标识，只用小写字母数字和连字符", required: true, position: 1),
+                Text("agent", "开这个工作区的 AI 名字，例如 claude / codex / grok", required: true, position: 2),
                 Text("root", "本次使用的工作区根，省略时用设置值"),
+                Bool("confirm", "项目已有闲置工作区时，仍坚持再开一个", "false"),
             ],
             Handler = CommandDescriptor.Sync(context => Create(
                 host.Settings,
                 context.RequireString("project"),
                 context.RequireString("slug"),
-                context.GetString("root"))),
+                context.RequireString("agent"),
+                context.GetString("root"),
+                context.GetBool("confirm"))),
         });
 
         registry.Register(new CommandDescriptor
@@ -105,12 +109,16 @@ internal static class DianaWorktreeCommands
         return CommandResult.Ok($"AI 工作区根已设为: {value}");
     }
 
-    private static CommandResult Create(ISettingsService settings, string project, string slug, string? rootOverride)
+    private static CommandResult Create(
+        ISettingsService settings, string project, string slug, string agent, string? rootOverride, bool confirm)
     {
         var projectName = project.Trim();
         var identifier = slug.Trim().ToLowerInvariant();
         if (identifier.Length == 0 || !identifier.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
             return CommandResult.Fail("slug 只能包含小写字母、数字和连字符。");
+        var author = agent.Trim().ToLowerInvariant();
+        if (author.Length == 0 || !author.All(char.IsAsciiLetterOrDigit))
+            return CommandResult.Fail("agent 只能是小写字母数字，例如 claude / codex / grok。");
 
         var projectPath = Path.Combine(DianaLibraryRoot.Resolve(settings), projectName);
         if (!Directory.Exists(projectPath))
@@ -131,12 +139,25 @@ internal static class DianaWorktreeCommands
             ? Directory.GetDirectories(projectRoot)
                 .Count(dir => Path.GetFileName(dir).StartsWith(head + "-", StringComparison.Ordinal)) + 1
             : 1;
-        var name = $"{head}-{ordinal}-{identifier}";
+        var name = $"{head}-{ordinal}-{author}-{identifier}";
         var worktreePath = Path.Combine(projectRoot, name);
         var branch = $"ai/{projectName}/{name}";
 
         if (Directory.Exists(worktreePath))
             return CommandResult.Fail($"工作区已存在：{worktreePath}");
+
+        // 克制闸门：对话窗口随时废弃，但工作区留在盘上。已经有一个"开了没干活"的工作区时，
+        // 默认拒绝再开一个——那多半是上一轮对话的残留，应该接着用或先回收，而不是又堆一个。
+        if (!confirm)
+        {
+            var idle = FindIdleWorktree(projectPath, projectRoot);
+            if (idle != null)
+            {
+                return CommandResult.Fail(
+                    $"项目已有闲置工作区 {idle}（无提交、无改动）。接着用它，或先 diana.worktree.remove；"
+                    + "确实需要并行再开时传 confirm=true。");
+            }
+        }
 
         var (_, addError) = Git(projectPath, "worktree", "add", "-b", branch, worktreePath, "HEAD");
         if (addError != null)
@@ -195,6 +216,32 @@ internal static class DianaWorktreeCommands
         }
     }
 
+
+    /// <summary>找出"开了但没干活"的工作区：既无未提交改动，其分支也没有领先主干的提交。</summary>
+    private static string? FindIdleWorktree(string projectPath, string projectRoot)
+    {
+        if (!Directory.Exists(projectRoot))
+            return null;
+
+        foreach (var candidate in Directory.GetDirectories(projectRoot))
+        {
+            var (status, statusError) = Git(candidate, "status", "--porcelain");
+            if (statusError != null || !string.IsNullOrWhiteSpace(status))
+                continue;
+            var (ahead, aheadError) = Git(projectPath, "rev-list", "--count", $"main..{ReadBranch(candidate)}");
+            if (aheadError == null && ahead == "0")
+                return Path.GetFileName(candidate);
+        }
+
+        return null;
+    }
+
+    private static string ReadBranch(string worktreePath)
+    {
+        var (branch, error) = Git(worktreePath, "rev-parse", "--abbrev-ref", "HEAD");
+        return error == null ? branch : "HEAD";
+    }
+
     private static CommandResult List(ISettingsService settings, string? project)
     {
         var root = ResolveRoot(settings, null);
@@ -243,7 +290,15 @@ internal static class DianaWorktreeCommands
         if (!Directory.Exists(projectPath))
             return CommandResult.Fail($"项目不存在：{projectPath}");
 
-        // 分支一律保留：工作区是可再生的，提交不是。
+        // 有未并回主干的提交时默认拒绝：工作区可再生，提交不可。force 只覆盖 git 自己的
+        // 脏工作区检查，覆盖不了"提交会失去落脚点"这件事，所以这道闸门单独判。
+        var (unmerged, _) = Git(projectPath, "rev-list", "--count", $"main..{ReadBranch(worktreePath)}");
+        if (!force && int.TryParse(unmerged, out var pending) && pending > 0)
+        {
+            return CommandResult.Fail(
+                $"该工作区的分支有 {pending} 个提交未并回 main。先合并，或确认要丢弃后传 force=true。");
+        }
+
         var arguments = force
             ? new[] { "worktree", "remove", "--force", worktreePath }
             : ["worktree", "remove", worktreePath];
