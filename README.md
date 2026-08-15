@@ -1,7 +1,7 @@
 # HistoryDiana — OneHistory 的 AI 工作区
 
 HistoryDiana 是 OneHistory 的 **AI 侧常驻工作区与模块开发管线**：AI 长期只在 Diana 管理的
-`F:\ai工作区` 分支工作树中修改模块，模块仓库主线只作为基线、合并目标和正式发布来源；Diana 托管跨项目公共定义，
+`F:\ai工作区` 分支工作树中修改模块，模块仓库主线只作为基线、合并目标和正式发布来源；跨项目事实通过 Diana MCP 从正式 z 读取，
 并以 `diana` 域提供隔离工作树、候选构建与试用、正式发布、项目巡检、MCP 中继和 z 文档通道。
 
 与 HistoryMercury 对称——Mercury 是人的翻译官（活动坞、全局快捷键、命令工作台），
@@ -21,7 +21,7 @@ Diana 不提供 UI 页面。
 | [`b-Code/Publish-OneHistoryModule.ps1`](./b-Code/Publish-OneHistoryModule.ps1) | 集中执行已登记模块的候选构建、测试、写入 z/docs 与正式提升 |
 | [`b-Code/module-publish.manifest.json`](./b-Code/module-publish.manifest.json) | 普通模块的发布登记与验证步骤；新增普通模块无需修改主发布脚本 |
 
-两个文档区分开的原因：公共区被**别的项目**消费，Diana 的合同只描述 Diana。
+模块源码和消费文档仍由各模块仓库拥有，Diana 只提供统一工作区、发布和 MCP 读取入口。
 
 ## 从这里开始
 
