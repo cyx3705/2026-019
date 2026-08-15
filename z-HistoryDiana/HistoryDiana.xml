@@ -27,6 +27,28 @@
             模块热重载后就与实际可见工具不一致。这里每次都现查现调，绕开那份旧快照。
             </remarks>
         </member>
+        <member name="T:HistoryDiana.DianaReleaseCommands">
+             <summary>
+             发布管线的命令面：把 <c>Publish-OneHistoryModule.ps1</c> 作为分离子进程拉起，
+             让模块发布和其余能力一样原生暴露为 MCP 工具。
+             </summary>
+             <remarks>
+             关键约束：运行状态只落在日志文件里，不放在本模块的内存里。
+             管线跑到最后会 <c>vulcan.module.reload</c>，发布 HistoryDiana 时本模块自身会在发布途中
+             被卸载重载——任何存在静态字段里的运行记录都会随之蒸发。因此 start 立即返回 run 标识，
+             status/log 一律现场读日志目录，Diana 被换掉也不影响追踪。
+            
+             子进程自己把 stdout/stderr 重定向进日志（PowerShell 的 <c>*&gt;</c>），Diana 不做流泵送：
+             泵送线程会随模块卸载而中断，日志就断在半截。退出码单独落一个纯 ASCII 的
+             <c>.exit</c> 文件，status 据此判断"仍在跑 / 成功 / 失败"，不依赖进程句柄。
+             </remarks>
+        </member>
+        <member name="M:HistoryDiana.DianaReleaseCommands.ReadTail(System.String,System.Int32,System.Int32@,System.Boolean@)">
+            <summary>读日志末尾；允许被子进程同时写入，因此以共享模式打开。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaReleaseCommands.Quote(System.String)">
+            <summary>PowerShell 单引号字符串：内部单引号翻倍转义。</summary>
+        </member>
         <member name="T:HistoryDiana.DianaTrialCommands">
              <summary>
              候选模块的试用装载：把 AI 工作区里的 z 快照按调用面加载进内存，供人工逐条调用验证。
