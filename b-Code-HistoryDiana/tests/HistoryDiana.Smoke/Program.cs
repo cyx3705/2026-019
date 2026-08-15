@@ -48,7 +48,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.4.2", moduleInfos[0].Version, "模块版本");
+    Equal("1.5.0", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
@@ -70,12 +70,12 @@ try
         "不得保留 StudioTools 或 ProjectPulse 命令前缀");
     True(descriptors.All(descriptor => descriptor.Domain == "HistoryDiana"), "命令域必须归属 HistoryDiana");
     SequenceEqual(
-        new[] { "docs", "kit", "project", "relay", "release", "trial" },
+        new[] { "docs", "kit", "project", "relay", "release", "trial", "worktree" },
         descriptors.Select(descriptor => descriptor.CommandClass!)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray(),
-        "Diana 只有 docs / kit / project / relay / release / trial 六个类");
+        "Diana 只有 docs / kit / project / relay / release / trial / worktree 七个类");
     commandCount = descriptors.Count;
     classCount = descriptors.Select(descriptor => descriptor.CommandClass!)
         .Distinct(StringComparer.Ordinal)
@@ -86,6 +86,7 @@ try
     {
         "diana.relay.call", "diana.trial.load", "diana.trial.call", "diana.trial.unload",
         "diana.release.start",
+        "diana.worktree.root", "diana.worktree.create", "diana.worktree.remove",
     };
     True(
         descriptors.Where(descriptor => !writeCommands.Contains(descriptor.Name))

@@ -44,6 +44,8 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         DianaTrialCommands.Register(registry, context);
         // 发布管线的命令面：分离子进程 + 日志追踪，见 DianaReleaseCommands 的类型注释。
         DianaReleaseCommands.Register(registry, context);
+        // AI 工作区：位置可配，默认 F:i工作区，见 DianaWorktreeCommands。
+        DianaWorktreeCommands.Register(registry, context);
 
         registry.Register(new CommandDescriptor
         {

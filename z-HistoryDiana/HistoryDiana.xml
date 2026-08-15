@@ -102,6 +102,19 @@
             交给候选模块的宿主上下文：服务全部转发宿主真身，只把命令登记引到私有注册表。
             </summary>
         </member>
+        <member name="T:HistoryDiana.DianaWorktreeCommands">
+             <summary>
+             AI 工作区的命令面：开分支工作树、列出、回收。
+             </summary>
+             <remarks>
+             位置不硬编码。优先级是 <c>root=</c> 参数 &gt; 设置项 <c>ai.worktreeroot</c> &gt; 默认
+             <see cref="F:HistoryDiana.DianaWorktreeCommands.DefaultRoot"/>，因此默认能用、想改随时改、单次想换也不用改设置。
+            
+             分支名与目录名同形：<c>ai/&lt;项目&gt;/&lt;短SHA&gt;-&lt;序号&gt;-&lt;标识&gt;</c>。
+             带短 SHA 是为了让工作区一眼看出基于哪个提交；带序号是因为同一提交上常并行开多个尝试，
+             上一轮 Janus 的性能修复和工作区特性就是同一 SHA 的 -1 与 -2。
+             </remarks>
+        </member>
         <member name="T:HistoryDiana.DianaZDocCommands">
             <summary>
             跨项目说明书只从各项目 <c>z-*</c> 读取。现场扫描生成通道，避免手维护清单漂移。
