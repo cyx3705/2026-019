@@ -54,11 +54,13 @@ internal static class DianaReleaseCommands
             [
                 Text("name", "已登记的模块名，见 diana.release.modules", required: true, position: 0),
                 Bool("publish", "是否正式促级到 z；false 时只构建候选并跑门禁", "false"),
+                Text("worktree", "从该 AI 工作区构建并跑门禁；与 publish=true 互斥，促级只从主树"),
             ],
             Handler = CommandDescriptor.Sync(context => Start(
                 host,
                 context.RequireString("name"),
-                context.GetBool("publish"))),
+                context.GetBool("publish"),
+                context.GetString("worktree"))),
         });
 
         registry.Register(new CommandDescriptor
@@ -134,7 +136,7 @@ internal static class DianaReleaseCommands
         return CommandResult.Ok(text.ToString(), rows.Select(row => new { row.Name, row.Kind, row.Project }).ToList());
     }
 
-    private static CommandResult Start(IModuleContext host, string name, bool publish)
+    private static CommandResult Start(IModuleContext host, string name, bool publish, string? worktree)
     {
         var moduleName = name.Trim();
         var registryPath = RegistryPath(host.Settings);
@@ -142,13 +144,27 @@ internal static class DianaReleaseCommands
             return CommandResult.Fail($"找不到发布登记表：{registryPath}");
 
         bool known;
+        var moduleProject = moduleName;
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(registryPath));
-            known = document.RootElement.TryGetProperty("modules", out var modules)
-                    && modules.EnumerateArray().Any(module =>
-                        module.TryGetProperty("name", out var value)
-                        && string.Equals(value.GetString(), moduleName, StringComparison.OrdinalIgnoreCase));
+            known = false;
+            if (document.RootElement.TryGetProperty("modules", out var modules))
+            {
+                foreach (var module in modules.EnumerateArray())
+                {
+                    if (!module.TryGetProperty("name", out var value)
+                        || !string.Equals(value.GetString(), moduleName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    known = true;
+                    if (module.TryGetProperty("projectDirectory", out var dir) && dir.GetString() is { Length: > 0 } project)
+                        moduleProject = project;
+                    break;
+                }
+            }
         }
         catch (JsonException ex)
         {
@@ -158,6 +174,19 @@ internal static class DianaReleaseCommands
         // 宿主是管线里的内置特例，不在登记表里，但确实可发布。
         if (!known && !moduleName.Equals("HistoryVulcan", StringComparison.OrdinalIgnoreCase))
             return CommandResult.Fail($"{moduleName} 不在发布登记表里，见 diana.release.modules。");
+
+        // 工作区只做门禁验证：促级必须从主树来，否则 z 会指向一份没人能复现的工作树产物。
+        string? projectRootOverride = null;
+        if (!string.IsNullOrWhiteSpace(worktree))
+        {
+            if (publish)
+                return CommandResult.Fail("worktree 与 publish=true 互斥：正式促级只能从主树构建。");
+            projectRootOverride = Path.IsPathFullyQualified(worktree.Trim())
+                ? worktree.Trim()
+                : Path.Combine(DianaWorktreeCommands.ResolveRootPublic(host.Settings), moduleProject, worktree.Trim());
+            if (!Directory.Exists(projectRootOverride))
+                return CommandResult.Fail($"工作区不存在：{projectRootOverride}");
+        }
 
         var scriptPath = Path.Combine(DianaProjectRoot(host.Settings), "b-Code", "Publish-OneHistoryModule.ps1");
         if (!File.Exists(scriptPath))
@@ -177,6 +206,8 @@ internal static class DianaReleaseCommands
         command.Append($"{Quote(scriptPath)} -Module {Quote(moduleName)}");
         if (publish)
             command.Append(" -Publish");
+        if (projectRootOverride != null)
+            command.Append($" -ProjectRoot {Quote(projectRootOverride)}");
         // 退出码单独落一个纯 ASCII 文件，不往日志里追加：`*>` 重定向用的是控制台编码，
         // 再用 Out-File 追加会混进另一种编码，实测哨兵行被写成 UTF-16 而无法解析。
         command.Append($" *> {Quote(logPath)}; ");

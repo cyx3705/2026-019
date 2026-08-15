@@ -3,7 +3,10 @@ param(
     [Parameter(Mandatory = $true)][string]$Module,
     [switch]$Publish,
     [switch]$AllowDirtySource,
-    [switch]$RequireCleanSource
+    [switch]$RequireCleanSource,
+    # AI 工作区里的提交级验证：从指定工作树构建并跑门禁。促级永远只从主树来，
+    # 因此本参数与 -Publish 互斥——否则 z 会指向一份没人能复现的工作树产物。
+    [string]$ProjectRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -501,7 +504,19 @@ $definition = $definitions[$Module]
 if ($null -eq $definition) {
     throw "Module '$Module' is not registered. Add a kind=module entry to $registryPath."
 }
-$projectRoot = Assert-ChildPath (Join-Path $projectsRoot $definition.ProjectDirectory) $projectsRoot 'Module project'
+if (-not [string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    if ($Publish) {
+        throw '-ProjectRoot 只用于工作区门禁验证，不能与 -Publish 同用：正式促级必须从主树构建。'
+    }
+    $projectRoot = [IO.Path]::GetFullPath($ProjectRoot)
+    if (-not (Test-Path -LiteralPath $projectRoot -PathType Container)) {
+        throw "指定的工作树不存在: $projectRoot"
+    }
+    Write-Host "[$Module] 从工作树构建并验证(不促级): $projectRoot"
+}
+else {
+    $projectRoot = Assert-ChildPath (Join-Path $projectsRoot $definition.ProjectDirectory) $projectsRoot 'Module project'
+}
 $versionPropsPath = Join-Path $projectRoot $definition.VersionProps
 $sourceManifestPath = Join-Path $projectRoot $definition.SourceManifest
 $candidateRoot = Assert-ChildPath (Join-Path $projectRoot $definition.CandidateDirectory) $projectRoot 'Candidate directory'

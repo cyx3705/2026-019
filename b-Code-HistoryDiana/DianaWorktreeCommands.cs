@@ -258,6 +258,9 @@ internal static class DianaWorktreeCommands
         return CommandResult.Ok($"已回收工作区 {name.Trim()}，分支保留未删。", new { Path = worktreePath });
     }
 
+    /// <summary>供同模块的其他命令解析工作区根，避免第二处默认值。</summary>
+    internal static string ResolveRootPublic(ISettingsService settings) => ResolveRoot(settings, null);
+
     private static string ResolveRoot(ISettingsService settings, string? rootOverride)
     {
         if (!string.IsNullOrWhiteSpace(rootOverride) && Path.IsPathFullyQualified(rootOverride.Trim()))
