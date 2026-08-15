@@ -28,6 +28,10 @@ namespace HistoryDiana;
 /// <c>vulcan.module.trialui.load/unload</c> 承接，本进程只经前端命令代理把请求递过去。
 /// 前端那份同样不进正式模块快照。
 ///
+/// <c>ui=true</c> 时若正式模块已装载，会先执行宿主 3.11.5 的 <c>vulcan.module.unload</c>
+/// 卸掉同名正式模块（释放工具窗口 Id），试用结束再 <c>vulcan.module.reload</c> 装回。
+/// 不得对 HistoryDiana 自己做这件事，否则本命令会把自己卸掉。
+///
 /// 另需注意：<c>Attach</c> 是候选模块自己的代码，它可能启动监视器、全局快捷键一类的进程级副作用，
 /// 这些副作用会和正式模块并存直到 <c>diana.trial.unload</c>。
 /// </remarks>
@@ -46,7 +50,7 @@ internal static class DianaTrialCommands
             Name = "diana.trial.load",
             Domain = "HistoryDiana",
             CommandClass = "trial",
-            Summary = "把指定 z 快照目录装载为候选模块（默认只进内存，ui=true 可创建验收界面）",
+            Summary = "把指定 z 快照目录装载为候选模块（默认只进内存，ui=true 可创建验收界面；若正式模块已装载会先卸载）",
             Example = @"diana.trial.load path=F:\ai工作区\2026-020-HistoryJanus\71c79b7-1-x\z-HistoryJanus",
             Parameters =
             [
@@ -166,6 +170,16 @@ internal static class DianaTrialCommands
         if (createUi && host.Bus.FrontendExecutor == null)
             return CommandResult.Fail("ui=true 需要已连接的 Vulcan 前端；当前没有可用的前端中继。");
 
+        var displacedFormal = false;
+        if (createUi)
+        {
+            var (displaced, fail) = await TryDisplaceFormalModuleAsync(host, moduleName, cancellation)
+                .ConfigureAwait(false);
+            if (fail != null)
+                return fail;
+            displacedFormal = displaced;
+        }
+
         var loadContext = new TrialLoadContext(key, assemblyPath);
         try
         {
@@ -191,6 +205,7 @@ internal static class DianaTrialCommands
             if (attached == 0)
             {
                 loadContext.Unload();
+                await RestoreFormalModulesIfIdleAsync(host, displacedFormal, cancellation).ConfigureAwait(false);
                 return CommandResult.Fail($"{moduleName} 没有可附着的 IModuleContextAware 类型，无法按调用面试用。");
             }
 
@@ -200,10 +215,11 @@ internal static class DianaTrialCommands
             // 先占别名再建界面：反过来的话，TryAdd 撞车时前端已经多出一个没人认领、
             // 也没人卸得掉的窗口。
             var trial = new TrialModule(
-                key, moduleName, moduleVersion, root, loadContext, trialRegistry, commands, createUi);
+                key, moduleName, moduleVersion, root, loadContext, trialRegistry, commands, createUi, displacedFormal);
             if (!Trials.TryAdd(key, trial))
             {
                 loadContext.Unload();
+                await RestoreFormalModulesIfIdleAsync(host, displacedFormal, cancellation).ConfigureAwait(false);
                 return CommandResult.Fail($"别名 {key} 已被并发占用。");
             }
 
@@ -218,6 +234,7 @@ internal static class DianaTrialCommands
                 {
                     Trials.TryRemove(key, out _);
                     loadContext.Unload();
+                    await RestoreFormalModulesIfIdleAsync(host, displacedFormal, cancellation).ConfigureAwait(false);
                     return CommandResult.Fail($"前端试用界面创建失败：{relayResult.Message}");
                 }
             }
@@ -226,6 +243,10 @@ internal static class DianaTrialCommands
             text.Append($"已试用装载 {moduleName} {moduleVersion}（别名 {key}）：{commands.Count} 条可调用命令");
             text.Append($"\n来源: {root}");
             text.Append("\n仅在内存中，未写盘、未进宿主注册表；用 diana.trial.call 调用，diana.trial.unload 卸载");
+            if (displacedFormal)
+            {
+                text.Append($"\n已先卸载正式模块 {moduleName}，以免工具窗口 Id 冲突；diana.trial.unload 后会重装正式模块");
+            }
             foreach (var name in commands.Take(30))
                 text.Append($"\n  {name}");
             if (commands.Count > 30)
@@ -239,6 +260,7 @@ internal static class DianaTrialCommands
                 Source = root,
                 Commands = commands,
                 Ui = createUi ? "frontend" : "disabled",
+                DisplacedFormal = displacedFormal,
             });
         }
         catch (Exception ex) when (ex is ReflectionTypeLoadException or BadImageFormatException
@@ -246,6 +268,7 @@ internal static class DianaTrialCommands
                                       or MissingMethodException or TypeLoadException)
         {
             loadContext.Unload();
+            await RestoreFormalModulesIfIdleAsync(host, displacedFormal, cancellation).ConfigureAwait(false);
             var reason = ex is TargetInvocationException { InnerException: { } inner } ? inner.Message : ex.Message;
             return CommandResult.Fail($"装载 {moduleName} 失败：{reason}");
         }
@@ -437,6 +460,7 @@ internal static class DianaTrialCommands
 
         var unloaded = new List<string>();
         var uiFailures = new List<string>();
+        var displacedAny = false;
         foreach (var key in targets)
         {
             if (!Trials.TryRemove(key, out var trial))
@@ -458,12 +482,16 @@ internal static class DianaTrialCommands
                 }
             }
 
+            displacedAny |= trial.DisplacedFormal;
             trial.LoadContext.Unload();
             unloaded.Add($"{trial.Alias}({trial.ModuleName} {trial.Version})");
         }
 
         if (unloaded.Count == 0)
             return CommandResult.Fail($"没有别名为 {alias} 的试用模块。");
+
+        var restored = await RestoreFormalModulesIfIdleAsync(host, displacedAny, cancellation)
+            .ConfigureAwait(false);
 
         // 可回收上下文的真正回收由 GC 决定；命令面已经摘除，调用不到了。
         var text = $"已卸载 {unloaded.Count} 个候选模块：{string.Join("、", unloaded)}";
@@ -472,6 +500,12 @@ internal static class DianaTrialCommands
             text += $"\n前端界面未能拆除（需手工执行 vulcan.module.trialui.unload）：\n  " +
                     string.Join("\n  ", uiFailures);
         }
+
+        if (restored is { Success: true })
+            text += "\n已 vulcan.module.reload 装回正式模块";
+        else if (restored is { Success: false })
+            text += $"\n正式模块未能自动装回（{restored.Message}）；请手工执行 vulcan.module.reload";
+
         return CommandResult.Ok(text);
     }
 
@@ -506,6 +540,132 @@ internal static class DianaTrialCommands
         }
     }
 
+    /// <summary>
+    /// <c>ui=true</c> 前若同名正式模块已装载，先走宿主 <c>vulcan.module.unload</c> 释放工具窗口 Id。
+    /// 卸 HistoryDiana 自己会把本命令从 MCP 摘掉，因此跳过。
+    /// </summary>
+    private static async Task<(bool Displaced, CommandResult? Fail)> TryDisplaceFormalModuleAsync(
+        IModuleContext host,
+        string moduleName,
+        CancellationToken cancellation)
+    {
+        if (moduleName.Equals("HistoryDiana", StringComparison.OrdinalIgnoreCase))
+            return (false, null);
+
+        CommandResult listed;
+        try
+        {
+            listed = await host.Bus.ExecuteAsync("vulcan.module.list", "diana.trial", cancellation)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (false, CommandResult.Fail($"无法确认正式模块是否已装载：{ex.Message}"));
+        }
+
+        if (!listed.Success)
+        {
+            return (false, CommandResult.Fail($"无法确认正式模块是否已装载：{listed.Message}"));
+        }
+
+        if (!FormalModuleIsLoaded(listed, moduleName))
+            return (false, null);
+
+        CommandResult unloaded;
+        try
+        {
+            unloaded = await host.Bus.ExecuteAsync(
+                    $"vulcan.module.unload name={CommandParser.QuoteArg(moduleName)}",
+                    "diana.trial",
+                    cancellation)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (false, CommandResult.Fail($"卸载正式模块 {moduleName} 失败：{ex.Message}"));
+        }
+
+        if (unloaded.Success)
+            return (true, null);
+
+        if (IsUnknownCommand(unloaded, "vulcan.module.unload"))
+        {
+            return (false, CommandResult.Fail(
+                "ui=true 卸正式模块需要 HistoryVulcan 3.11.5 及以上（vulcan.module.unload）。当前宿主没有这条命令。"));
+        }
+
+        if (unloaded.Message.Contains("没有已装载的模块", StringComparison.Ordinal))
+            return (false, null);
+
+        return (false, CommandResult.Fail($"卸载正式模块 {moduleName} 失败：{unloaded.Message}"));
+    }
+
+    private static bool FormalModuleIsLoaded(CommandResult listed, string moduleName)
+    {
+        if (listed.Data is System.Collections.IEnumerable rows)
+        {
+            foreach (var row in rows)
+            {
+                if (row is null)
+                    continue;
+                var type = row.GetType();
+                var name = type.GetProperty("ModuleName")?.GetValue(row) as string
+                           ?? type.GetProperty("Name")?.GetValue(row) as string;
+                if (moduleName.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+
+        foreach (var line in listed.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Equals(moduleName, StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith(moduleName + " ", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsUnknownCommand(CommandResult result, string commandName)
+        => !result.Success
+           && result.Message.Contains("未知指令", StringComparison.Ordinal)
+           && result.Message.Contains(commandName, StringComparison.Ordinal);
+
+    /// <summary>
+    /// 没有仍占用正式模块位置的试用时，把 z 里的正式模块装回来。
+    /// 返回 reload 的结果；未发起 reload 时返回 <see langword="null"/>。
+    /// </summary>
+    private static async Task<CommandResult?> RestoreFormalModulesIfIdleAsync(
+        IModuleContext host,
+        bool displaced,
+        CancellationToken cancellation)
+    {
+        if (!displaced)
+            return null;
+        if (Trials.Values.Any(trial => trial.DisplacedFormal))
+            return null;
+
+        try
+        {
+            var restored = await host.Bus.ExecuteAsync("vulcan.module.reload", "diana.trial", cancellation)
+                .ConfigureAwait(false);
+            if (!restored.Success)
+                host.Log.Warn("diana.trial", $"正式模块未能自动装回：{restored.Message}");
+            return restored;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            host.Log.Warn("diana.trial", $"正式模块未能自动装回：{ex.Message}");
+            return CommandResult.Fail(ex.Message);
+        }
+    }
+
     private static ParameterSpec Text(string name, string description, bool required = false, int? position = null)
         => new()
         {
@@ -532,7 +692,8 @@ internal static class DianaTrialCommands
         TrialLoadContext LoadContext,
         CommandRegistry Registry,
         IReadOnlyList<string> Commands,
-        bool FrontendUi);
+        bool FrontendUi,
+        bool DisplacedFormal);
 
     /// <summary>
     /// 候选模块的可回收装载上下文。

@@ -69,7 +69,7 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 即完成部署。模块发布不要关闭 Vulcan：宿主从内存加载 DLL，覆盖 z 后执行 `vulcan.module.reload`
 （管线在正式宿主运行时会自己调）。只有替换宿主 EXE 才需要停进程。
 
-当前 Diana 源码与正式 `z-HistoryDiana` 均为 `1.10.2`。
+当前 Diana 源码为 `1.10.3`；正式 `z-HistoryDiana` 仍为 `1.10.2`，直至本版本发布。
 
 ## 集中发布
 

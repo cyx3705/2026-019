@@ -15,7 +15,7 @@
       "documentation"
     ],
     "status": "active",
-    "version": "1.10.2",
+    "version": "1.10.3",
     "branch": "main"
   },
   "paths": {
@@ -92,7 +92,7 @@
     },
     {
       "name": "HistoryVulcan",
-      "version": "3.11.3",
+      "version": "3.11.5",
       "purpose": "Diana 的模块 API、命令注册、MCP 投影与正式运行宿主"
     }
   ],

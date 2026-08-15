@@ -48,7 +48,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.10.2", moduleInfos[0].Version, "模块版本");
+    Equal("1.10.3", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
@@ -147,6 +147,148 @@ try
     True(afterFailedUi.Message.Contains("当前没有试用中的候选模块", StringComparison.Ordinal),
         "ui=true 失败后不得残留试用条目");
 
+    var janusRoot = Path.Combine(temporaryRoot, "candidate", "z-HistoryJanus");
+    Directory.CreateDirectory(janusRoot);
+    File.Copy(assembly.Location, Path.Combine(janusRoot, "HistoryJanus.dll"));
+    File.WriteAllText(Path.Combine(janusRoot, "module.manifest.json"),
+        """
+        {"schemaVersion":1,"type":"HistoryVulcan.Module","name":"HistoryJanus","version":"9.9.9","artifact":"HistoryJanus.dll","ui":true}
+        """);
+
+    var loadedFormal = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "HistoryJanus", "HistoryDiana" };
+    var unloadCalls = new List<string>();
+    var reloadCount = 0;
+    registry.Register(new CommandDescriptor
+    {
+        Name = "vulcan.module.list",
+        Domain = "vulcan",
+        CommandClass = "module",
+        Summary = "列出已加载模块",
+        Readonly = true,
+        Handler = CommandDescriptor.Sync(_ =>
+        {
+            if (loadedFormal.Count == 0)
+                return CommandResult.Ok("当前无已加载模块。");
+            return CommandResult.Ok(
+                string.Join('\n', loadedFormal.OrderBy(name => name, StringComparer.Ordinal)
+                    .Select(name => $"{name} 9.9.9 (1 条指令)")),
+                loadedFormal.Select(name => new { ModuleName = name }).ToArray());
+        }),
+    });
+    registry.Register(new CommandDescriptor
+    {
+        Name = "vulcan.module.unload",
+        Domain = "vulcan",
+        CommandClass = "module",
+        Summary = "卸载一个已装载模块",
+        Parameters =
+        [
+            new ParameterSpec { Name = "name", Description = "模块名", Required = true, Position = 0 },
+        ],
+        Handler = CommandDescriptor.Sync(context =>
+        {
+            var name = context.RequireString("name");
+            unloadCalls.Add(name);
+            loadedFormal.Remove(name);
+            return CommandResult.Ok($"已卸载 {name}");
+        }),
+    });
+    registry.Register(new CommandDescriptor
+    {
+        Name = "vulcan.module.reload",
+        Domain = "vulcan",
+        CommandClass = "module",
+        Summary = "重载全部后台模块",
+        Handler = CommandDescriptor.Sync(_ =>
+        {
+            reloadCount++;
+            loadedFormal.Add("HistoryJanus");
+            loadedFormal.Add("HistoryDiana");
+            return CommandResult.Ok("重载完成: 2 个模块");
+        }),
+    });
+
+    var frontendCalls = new List<string>();
+    bus.FrontendExecutor = (text, _, _) =>
+    {
+        frontendCalls.Add(text);
+        return Task.FromResult(CommandResult.Ok("frontend-ok"));
+    };
+
+    var dianaUi = await bus.ExecuteAsync(
+        $"diana.trial.load path={candidateRoot} alias=smoke-ui ui=true", "smoke");
+    True(dianaUi.Success, "HistoryDiana 候选 ui=true 在有前端时应成功");
+    Equal(0, unloadCalls.Count, "不得卸载 HistoryDiana 自己");
+    True(frontendCalls.Exists(call => call.StartsWith("vulcan.module.trialui.load", StringComparison.Ordinal)),
+        "HistoryDiana ui=true 仍应中继 trialui.load");
+    True(!dianaUi.Message.Contains("已先卸载正式模块", StringComparison.Ordinal),
+        "跳过卸载时不得声称已卸正式模块");
+
+    var afterDianaUnload = await bus.ExecuteAsync("diana.trial.unload alias=smoke-ui", "smoke");
+    True(afterDianaUnload.Success, "卸 HistoryDiana 试用");
+    Equal(0, reloadCount, "未腾出正式模块时不得 reload");
+
+    frontendCalls.Clear();
+    var janusUi = await bus.ExecuteAsync(
+        $"diana.trial.load path={janusRoot} alias=smoke-janus ui=true", "smoke");
+    True(janusUi.Success, "同名正式模块已装载时 ui=true 应先卸再装试用界面");
+    SequenceEqual(new[] { "HistoryJanus" }, unloadCalls, "应卸载正式 HistoryJanus");
+    True(janusUi.Message.Contains("已先卸载正式模块 HistoryJanus", StringComparison.Ordinal),
+        "成功结果应说明已卸正式模块");
+    True(frontendCalls.Exists(call => call.StartsWith("vulcan.module.trialui.load", StringComparison.Ordinal)),
+        "卸正式模块后仍应中继 trialui.load");
+    True(!frontendCalls.Exists(call => call.Contains("vulcan.module.unload", StringComparison.Ordinal)),
+        "unload 必须走总线，不得误投前端中继");
+
+    var afterJanusUnload = await bus.ExecuteAsync("diana.trial.unload alias=smoke-janus", "smoke");
+    True(afterJanusUnload.Success, "卸 HistoryJanus 试用");
+    Equal(1, reloadCount, "腾出位置的试用卸完后应 reload");
+    True(afterJanusUnload.Message.Contains("vulcan.module.reload", StringComparison.Ordinal),
+        "卸载结果应说明已装回正式模块");
+
+    unloadCalls.Clear();
+    loadedFormal.Remove("HistoryJanus");
+    frontendCalls.Clear();
+    var janusSkip = await bus.ExecuteAsync(
+        $"diana.trial.load path={janusRoot} alias=smoke-janus-skip ui=true", "smoke");
+    True(janusSkip.Success, "正式模块未装载时 ui=true 仍应建界面");
+    Equal(0, unloadCalls.Count, "正式模块未装载时不得调用 unload");
+    True(frontendCalls.Exists(call => call.StartsWith("vulcan.module.trialui.load", StringComparison.Ordinal)),
+        "未装载正式模块时仍应中继 trialui.load");
+    var afterSkipUnload = await bus.ExecuteAsync("diana.trial.unload alias=smoke-janus-skip", "smoke");
+    True(afterSkipUnload.Success, "卸未腾位的试用");
+    Equal(1, reloadCount, "未腾位的试用卸完不得再 reload");
+
+    var isolatedRegistry = new CommandRegistry();
+    var isolatedLog = new TestLog();
+    var isolatedBus = new CommandBus(isolatedRegistry, isolatedLog);
+    isolatedBus.FrontendExecutor = (_, _, _) => Task.FromResult(CommandResult.Ok("frontend-ok"));
+    var isolatedSettings = new TestSettings(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["proj.libraryroot"] = temporaryRoot,
+    });
+    var isolatedContext = new TestModuleContext(isolatedBus, isolatedSettings, isolatedLog, temporaryRoot, isolatedRegistry);
+    new HistoryDianaCommands().Attach(isolatedContext);
+    isolatedRegistry.Register(new CommandDescriptor
+    {
+        Name = "vulcan.module.list",
+        Domain = "vulcan",
+        CommandClass = "module",
+        Summary = "列出已加载模块",
+        Readonly = true,
+        Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(
+            "HistoryJanus 4.0.0 (40 条指令)",
+            new[] { new { ModuleName = "HistoryJanus" } })),
+    });
+    var missingUnload = await isolatedBus.ExecuteAsync(
+        $"diana.trial.load path={janusRoot} alias=need-unload ui=true", "smoke");
+    True(!missingUnload.Success, "宿主没有 vulcan.module.unload 时 ui=true 必须失败");
+    True(missingUnload.Message.Contains("3.11.5", StringComparison.Ordinal),
+        "失败说明必须点名宿主 3.11.5");
+    var afterMissing = await isolatedBus.ExecuteAsync("diana.trial.list", "smoke");
+    True(afterMissing.Message.Contains("当前没有试用中的候选模块", StringComparison.Ordinal),
+        "缺少 unload 失败后不得残留试用条目");
+
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
         "程序集不得保留 ProjectPulse 类型");
     Equal(0, assembly.GetTypes().Count(type => type.IsPublic && !type.IsAbstract
@@ -154,8 +296,20 @@ try
 }
 finally
 {
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+    GC.Collect();
     if (Directory.Exists(temporaryRoot))
-        Directory.Delete(temporaryRoot, recursive: true);
+    {
+        try
+        {
+            Directory.Delete(temporaryRoot, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 可回收 ALC 可能仍短暂锁着候选 DLL；夹具目录在 %TEMP%，不阻塞断言。
+        }
+    }
 }
 
 Console.WriteLine($"HistoryDiana.Smoke: PASS (1 module, {commandCount} commands in {classCount} classes, explicit HistoryVulcan command registration)");
