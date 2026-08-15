@@ -564,7 +564,10 @@ try {
         '-Configuration', 'Release', '-OutputRoot', $candidateRoot
     )
     if (-not [string]::IsNullOrWhiteSpace($SourceWorktree)) {
+        # 逐处透传参数太脆：构建、门禁、验证各有各的调用点，漏一处就又是一次"撞了才发现"。
+        # 改用环境变量，所有子进程一并继承；脚本侧在参数为空时回落到它。
         $hostSnapshot = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-HistoryVulcan'
+        $env:HISTORYVULCAN_PACKAGE_ROOT = $hostSnapshot
         $buildArguments += @('-HistoryVulcanPackageRoot', $hostSnapshot)
     }
     Invoke-Checked 'powershell.exe' $buildArguments $projectRoot 'Build candidate package'
