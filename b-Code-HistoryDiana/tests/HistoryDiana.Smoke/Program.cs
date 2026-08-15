@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using BaseVariable;
 using HistoryDiana;
 using HistoryVulcan.Core.Commands;
@@ -48,7 +48,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.2.0", moduleInfos[0].Version, "模块版本");
+    Equal("1.3.0", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
@@ -70,21 +70,26 @@ try
         "不得保留 StudioTools 或 ProjectPulse 命令前缀");
     True(descriptors.All(descriptor => descriptor.Domain == "HistoryDiana"), "命令域必须归属 HistoryDiana");
     SequenceEqual(
-        new[] { "docs", "kit", "project", "relay" },
+        new[] { "docs", "kit", "project", "relay", "trial" },
         descriptors.Select(descriptor => descriptor.CommandClass!)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray(),
-        "Diana 只有 docs / kit / project / relay 四个类");
+        "Diana 只有 docs / kit / project / relay / trial 五个类");
     commandCount = descriptors.Count;
     classCount = descriptors.Select(descriptor => descriptor.CommandClass!)
         .Distinct(StringComparer.Ordinal)
         .Count();
-    // relay.call 会真的调用外部工具，是唯一的写操作；其余一律只读。
+    // Diana 默认只读。写操作必须逐条列名，不能靠"新命令自然就不只读"混进来：
+    // relay.call 真的调用外部工具；trial.load/call/unload 装载并执行候选模块的任意代码。
+    var writeCommands = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "diana.relay.call", "diana.trial.load", "diana.trial.call", "diana.trial.unload",
+    };
     True(
-        descriptors.Where(descriptor => descriptor.Name != "diana.relay.call")
+        descriptors.Where(descriptor => !writeCommands.Contains(descriptor.Name))
             .All(descriptor => descriptor.Readonly),
-        "除 diana.relay.call 外所有 Diana 命令必须声明为只读");
+        "除显式列名的写命令外，所有 Diana 命令必须声明为只读");
 
     Equal(null, bus.Validate($"diana.project.summary name={projectName}"), "summary 命令校验");
     Equal(null, bus.Validate($"diana.project.recent name={projectName} days=1 limit=10"), "recent 命令校验");
