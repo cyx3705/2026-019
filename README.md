@@ -5,7 +5,7 @@ HistoryDiana 是 OneHistory 的 **AI 侧常驻工作区与模块开发管线**�
 并以 `diana` 域提供隔离工作树、候选构建与试用、正式发布、项目巡检、MCP 中继和 z 文档通道。
 
 与 HistoryMercury 对称——Mercury 是人的翻译官（活动坞、全局快捷键、命令工作台），
-Diana 是 AI 的翻译官（公共定义、隔离开发、候选验证、发布编排、巡检、中继和文档通道）。
+Diana 是 AI 的翻译官（隔离开发、候选验证、发布编排、巡检、中继和文档通道）。
 Diana 不提供 UI 页面。
 
 ![OneHistory Logo](./Logo.png)
