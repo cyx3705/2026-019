@@ -142,10 +142,13 @@ internal static class DianaWorktreeCommands
         if (addError != null)
             return CommandResult.Fail($"建工作区失败：{addError}");
 
+        var overrideNote = WriteBuildOverride(worktreePath, settings);
+
         var text = new StringBuilder($"已开工作区 {name}");
         text.Append($"\n路径: {worktreePath}");
         text.Append($"\n分支: {branch}（基于 {head}）");
         text.Append($"\n项目: {projectPath}");
+        text.Append($"\n{overrideNote}");
         return CommandResult.Ok(text.ToString(), new
         {
             Name = name,
@@ -154,6 +157,42 @@ internal static class DianaWorktreeCommands
             BaseCommit = head,
             Project = projectName,
         });
+    }
+
+
+    /// <summary>
+    /// 在新工作树里写下本机覆盖点，让它一诞生就能构建。
+    /// </summary>
+    /// <remarks>
+    /// 各工程按相对路径引用宿主 z 快照，假定本仓与 2026-023-HistoryVulcan 在同一库根下；
+    /// 而 AI 工作树落在库根之外，那条相对路径必然指空，表现为上百个"找不到类型"。
+    /// 这里把 HistoryVulcanPackageRoot 指回来源库根的绝对路径。文件不入库（各项目 .gitignore 已登记），
+    /// 因此工作树从诞生起就是干净的；项目侧没有 Directory.Build.props 时不写，避免留下无人 Import 的孤儿文件。
+    /// </remarks>
+    private static string WriteBuildOverride(string worktreePath, ISettingsService settings)
+    {
+        try
+        {
+            if (!File.Exists(Path.Combine(worktreePath, "Directory.Build.props")))
+                return "（项目没有 Directory.Build.props，未写本机覆盖点）";
+
+            var hostRoot = Path.Combine(DianaLibraryRoot.Resolve(settings), "2026-023-HistoryVulcan", "z-HistoryVulcan");
+            var content = $"""
+                <Project>
+                  <!-- 由 diana.worktree.create 生成：把宿主快照指回来源库根。不入库。 -->
+                  <PropertyGroup>
+                    <HistoryVulcanPackageRoot>{hostRoot}</HistoryVulcanPackageRoot>
+                  </PropertyGroup>
+                </Project>
+
+                """;
+            File.WriteAllText(Path.Combine(worktreePath, "Directory.Build.user.props"), content);
+            return $"本机覆盖点已写入，宿主快照指向 {hostRoot}";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"（本机覆盖点写入失败，构建时需手动传 -p:HistoryVulcanPackageRoot=…：{ex.Message}）";
+        }
     }
 
     private static CommandResult List(ISettingsService settings, string? project)

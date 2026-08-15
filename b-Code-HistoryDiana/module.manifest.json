@@ -1,9 +1,9 @@
-{
+﻿{
   "schemaVersion": 1,
   "type": "HistoryVulcan.Module",
   "name": "HistoryDiana",
-  "version": "1.6.0",
-  "description": "OneHistory AI 工作区工具箱：工作树巡检、小工具与 MCP 工具中继。",
+  "version": "1.7.2",
+  "description": "OneHistory AI 宸ヤ綔鍖哄伐鍏风锛氬伐浣滄爲宸℃銆佸皬宸ュ叿涓?MCP 宸ュ叿涓户銆?,
   "artifact": "HistoryDiana.dll",
   "docs": "HistoryDiana.xml",
   "mcpExposure": "standard",

@@ -48,7 +48,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.6.0", moduleInfos[0].Version, "模块版本");
+    Equal("1.7.2", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
