@@ -15,8 +15,8 @@
       "documentation"
     ],
     "status": "active",
-    "version": "1.2.0",
-    "branch": "2026-019-HistoryDiana"
+    "version": "1.10.1",
+    "branch": "main"
   },
   "paths": {
     "activeRoots": [
@@ -55,6 +55,7 @@
     "technicalContract": "b-Office-Diana/current/技术合同.md",
     "decisions": "b-Office-Diana/current/有效决策.md",
     "verification": "b-Office-Diana/current/验证合同.md",
+    "moduleDevelopment": "b-Office-Diana/package/模块开发手册.md",
     "oneHistoryIndex": "b-Office-OneHistory/文档中心.md",
     "oneHistoryDefinitions": "b-Office-OneHistory/定义/OneHistory总览.md",
     "oneHistoryNaming": "b-Office-OneHistory/定义/目录与命名规范.md",
@@ -72,7 +73,8 @@
       "b-Code/OneHistory.ModuleContract.ps1",
       "b-Code/OneHistory.HostContract.ps1",
       "b-Code/Publish-OneHistoryModule.ps1",
-      "b-Code/module-publish.manifest.json"
+      "b-Code/module-publish.manifest.json",
+      "b-Office-Diana/package/模块开发手册.md"
     ],
     "linkCheckExclusions": [
       "*\\history\\*",
@@ -85,7 +87,7 @@
     "test": "dotnet run --project .\\b-Code-HistoryDiana\\tests\\HistoryDiana.Smoke\\HistoryDiana.Smoke.csproj -c Release",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code\\Test-ProjectContract.ps1 -Instantiation",
     "run": null,
-    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code\\Publish-OneHistoryModule.ps1 -Module HistoryJanus"
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code\\Publish-OneHistoryModule.ps1 -Module HistoryDiana"
   },
   "externalDependencies": [
     {
@@ -95,23 +97,8 @@
     },
     {
       "name": "HistoryVulcan",
-      "version": "3.11.2",
-      "purpose": "正式运行与开发均对齐 2026-023-HistoryVulcan 3.11.2"
-    },
-    {
-      "name": "HistoryMinerva",
-      "version": "4.3.2",
-      "purpose": "集中发布模块；源码与测试仍由 2026-024-HistoryMinerva 拥有"
-    },
-    {
-      "name": "HistoryJanus",
-      "version": "3.8.0",
-      "purpose": "集中发布模块；源码与测试仍由 2026-020-HistoryJanus 拥有"
-    },
-    {
-      "name": "HistoryMercury",
-      "version": "4.4.0",
-      "purpose": "正式模块与开发均对齐 4.4.0；源码与测试仍由 2026-021-HistoryMercury 拥有"
+      "version": "3.11.3",
+      "purpose": "Diana 的模块 API、命令注册、MCP 投影与正式运行宿主"
     }
   ],
   "contextExclusions": [
