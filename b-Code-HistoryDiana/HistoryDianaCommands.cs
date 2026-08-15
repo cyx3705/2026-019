@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Modules;
 using HistoryVulcan.Core.Storage;
@@ -14,6 +14,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
     };
 
     private ISettingsService? _settings;
+    private IModuleContext? _context;
 
     /// <summary>Attaches the host-owned settings store and stages all module commands.</summary>
     public void Attach(IModuleContext context)
@@ -23,6 +24,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
             throw new InvalidOperationException("HistoryDiana 命令已附着到宿主上下文。");
 
         _settings = context.Settings;
+        _context = context;
         context.RegisterCommands(RegisterCommands);
     }
 
@@ -30,12 +32,16 @@ public sealed class HistoryDianaCommands : IModuleContextAware
     {
         var settings = _settings
             ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
+        var context = _context
+            ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
         // 工具箱的另外两类：kit（哈希/编码/标识/时间）与 relay（MCP 工具中继）。
         // 按类分文件，但注册入口只有这一处。docs 通道按现场 z-* 扫描登记。
         DianaKitCommands.Register(registry);
         DianaRelayCommands.Register(registry);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
         DianaZDocCommands.Register(registry, settings);
+        // 候选模块试用：只进内存、不做发现、只供调用，见 DianaTrialCommands 的类型注释。
+        DianaTrialCommands.Register(registry, context);
 
         registry.Register(new CommandDescriptor
         {
