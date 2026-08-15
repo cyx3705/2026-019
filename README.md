@@ -1,6 +1,7 @@
 # HistoryDiana — OneHistory 的 AI 工作区
 
-HistoryDiana 是 OneHistory 的 **AI 侧常驻工作区与模块开发管线**：托管跨项目公共定义，
+HistoryDiana 是 OneHistory 的 **AI 侧常驻工作区与模块开发管线**：AI 长期只在 Diana 管理的
+`F:\ai工作区` 分支工作树中修改模块，模块仓库主线只作为基线、合并目标和正式发布来源；Diana 托管跨项目公共定义，
 并以 `diana` 域提供隔离工作树、候选构建与试用、正式发布、项目巡检、MCP 中继和 z 文档通道。
 
 与 HistoryMercury 对称——Mercury 是人的翻译官（活动坞、全局快捷键、命令工作台），
