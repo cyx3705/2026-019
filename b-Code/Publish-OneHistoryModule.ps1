@@ -64,44 +64,6 @@ $definitions['HistoryVulcan'] = [ordered]@{
         )
 }
 
-function Update-CommandManual {
-    <#
-        .SYNOPSIS
-        发布后刷新全体系命令面总览。
-
-        .DESCRIPTION
-        命令面是跨模块的横切事实：任何一个模块部署都会改变它，因此刷新挂在每次发布之后，
-        而不是由某个模块自己负责——由模块负责就意味着别人发布时它会过期。
-
-        文档落在 Diana 的 b-Office-OneHistory：它既不是某个项目的 package 文档（那是各项目
-        自己的复用说明），也不是元文件（那是「定义」），而是从运行时注册表导出的跨模块事实。
-
-        用宿主的 --export-command-manual 无头入口而不是 vulcan.command.manual 命令：
-        后者带本地二次确认闸口，无人值守跑不了，而为它开「跳过确认」的口子会削弱确认语义。
-
-        本步骤失败不回滚已完成的发布：手册是发布的产物而非前提，缺一份手册不该让一次
-        已经通过全部门禁的发布作废。失败会明确告警，可用同一命令手动补齐。
-    #>
-    $hostExecutable = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-HistoryVulcan\host\HistoryVulcan.exe'
-    if (-not (Test-Path -LiteralPath $hostExecutable -PathType Leaf)) {
-        Write-Warning "命令面总览未刷新：找不到已发布宿主 $hostExecutable"
-        return
-    }
-
-    $manualPath = Join-Path $dianaRoot 'b-Office-OneHistory\命令面总览.md'
-    try {
-        & $hostExecutable '--export-command-manual' $manualPath
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "命令面总览刷新失败（退出码 $LASTEXITCODE）：$manualPath"
-            return
-        }
-        Write-Host "Command manual: $manualPath"
-    }
-    catch {
-        Write-Warning "命令面总览刷新失败：$($_.Exception.Message)"
-    }
-}
-
 function Repair-VulcanAutostart {
     param([Parameter(Mandatory = $true)][string]$ModuleRoot)
 
@@ -707,12 +669,11 @@ try {
         }
     }
 
-    Update-CommandManual
     if ($definition.Kind -eq 'host' -and $Module -eq 'HistoryVulcan') {
         Repair-VulcanAutostart $formalRoot
     }
 
-    Write-Host "Deploy-then-commit: 现在提交 $projectRoot 的源码与 $($definition.FormalDirectory)。Diana 的命令面总览如有更新一并提交。"
+    Write-Host "Deploy-then-commit: 现在提交 $projectRoot 的源码与 $($definition.FormalDirectory)。跨模块说明书从各自 z/docs 经 Diana MCP 读取。"
 }
 finally {
     if (Test-Path -LiteralPath $workRoot) {

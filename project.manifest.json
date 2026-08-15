@@ -22,7 +22,6 @@
     "activeRoots": [
       "b-Office-Diana/current",
       "b-Office-Diana/package",
-      "b-Office-OneHistory",
       "b-Code",
       "b-Code-HistoryDiana"
     ],
@@ -56,10 +55,7 @@
     "decisions": "b-Office-Diana/current/有效决策.md",
     "verification": "b-Office-Diana/current/验证合同.md",
     "moduleDevelopment": "b-Office-Diana/package/模块开发手册.md",
-    "oneHistoryIndex": "b-Office-OneHistory/文档中心.md",
-    "oneHistoryDefinitions": "b-Office-OneHistory/定义/OneHistory总览.md",
-    "oneHistoryNaming": "b-Office-OneHistory/定义/目录与命名规范.md",
-    "consumerIndex": "b-Office-OneHistory/文档中心.md"
+    "moduleDevelopment": "b-Office-Diana/package/模块开发手册.md"
   },
   "contract": {
     "requiredFiles": [

@@ -33,8 +33,8 @@
 - 不执行 Git commit、tag、push、正式发布或外部部署，除非用户明确要求。
 - 新增活动目录、外部依赖或验证命令时，同步更新 `project.manifest.json` 和相关现行文档。
 - `b-Code-HistoryDiana/` 只保存 Diana 源码和测试，不在其中创建 `docs/`；人工维护的 Diana 文档
-  应放入 `b-Office-Diana/current/` 或 `b-Office-Diana/package/`，跨项目公共文档放入
-  `b-Office-OneHistory/`。
+  应放入 `b-Office-Diana/current/` 或 `b-Office-Diana/package/`。模块消费文档只由各模块仓库的
+  `b-Office/package/` 编辑并发布到各自 `z-*/docs/`，跨项目读取统一走 Diana MCP，不再建立集中副本区。
 
 ## 实施与验证
 

@@ -16,7 +16,6 @@ Diana 不提供 UI 页面。
 | --- | --- |
 | [`project.manifest.json`](./project.manifest.json) | 项目身份、活动目录、文档与命令的机器可读清单 |
 | [`AGENTS.md`](./AGENTS.md) | AI 工作合同：读取顺序、真值判定、边界 |
-| [`b-Office-OneHistory/文档中心.md`](./b-Office-OneHistory/文档中心.md) | **跨项目公共文档中心**：OneHistory 定义、命名规范和 catalog 入口 |
 | [`b-Office-Diana/`](./b-Office-Diana/) | Diana 自身的项目合同 |
 | [`b-Office-Diana/package/模块开发手册.md`](./b-Office-Diana/package/模块开发手册.md) | 新 AI 开发 OneHistory 模块时的必读流程 |
 | [`b-Code/Publish-OneHistoryModule.ps1`](./b-Code/Publish-OneHistoryModule.ps1) | 集中执行已登记模块的候选构建、测试、写入 z/docs 与正式提升 |
@@ -30,11 +29,8 @@ Diana 不提供 UI 页面。
 
 1. 要开发模块，先读[模块开发手册](./b-Office-Diana/package/模块开发手册.md)，按其中的
    `docs → worktree → release(candidate) → trial → main → release(publish) → commit → remove` 流程执行。
-2. [OneHistory 总览](./b-Office-OneHistory/定义/OneHistory总览.md) —— 项目库 / 宿主 / 模块 /
-   工作区 / 消费区 各指什么。
-3. [目录与命名规范](./b-Office-OneHistory/定义/目录与命名规范.md) —— 指令三段式、
-   版本单一来源、文档结构。
-4. [OneHistory 文档中心](./b-Office-OneHistory/文档中心.md) —— 跨项目阅读先执行 `diana.docs.catalog`。
+2. 需要跨项目说明书时，先执行 `diana.docs.catalog`，把索引留在对话中，再读取对应 z 通道；
+   不打开其他模块 worktree，也不从 Diana 本地目录寻找副本。
 
 ## 指令
 
