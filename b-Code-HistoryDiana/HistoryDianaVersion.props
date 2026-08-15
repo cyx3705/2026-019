@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <HistoryDianaVersion>1.3.0</HistoryDianaVersion>
+    <HistoryDianaVersion>1.4.2</HistoryDianaVersion>
     <VersionPrefix>$(HistoryDianaVersion)</VersionPrefix>
     <Version>$(HistoryDianaVersion)</Version>
     <AssemblyVersion>$(HistoryDianaVersion).0</AssemblyVersion>

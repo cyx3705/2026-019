@@ -42,6 +42,8 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         DianaZDocCommands.Register(registry, settings);
         // 候选模块试用：只进内存、不做发现、只供调用，见 DianaTrialCommands 的类型注释。
         DianaTrialCommands.Register(registry, context);
+        // 发布管线的命令面：分离子进程 + 日志追踪，见 DianaReleaseCommands 的类型注释。
+        DianaReleaseCommands.Register(registry, context);
 
         registry.Register(new CommandDescriptor
         {
