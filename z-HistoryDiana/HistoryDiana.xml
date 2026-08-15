@@ -61,7 +61,12 @@
                只能经 <c>diana.trial.call</c> 调用，因此不会和正式模块的同名命令抢注册，
                也不会出现在补全、面板和 MCP 工具表里。
             
-             代价是候选模块的 UI 不会被创建（不调用 IUiModule），能验的是命令行为本身。
+             默认不建界面，验的是命令行为本身；<c>ui=true</c> 走人工验收路径。**界面不在本进程创建**：
+             Diana 住在无窗 <c>--service</c> 后台进程，那里没有 <c>IShellUiRegistrar</c> 也没有 Dispatcher，
+             而 WPF 对象不可能递过进程边界。候选程序集因此在前端再装一份——由宿主 3.11.4 的
+             <c>vulcan.module.trialui.load/unload</c> 承接，本进程只经前端命令代理把请求递过去。
+             前端那份同样不进正式模块快照。
+            
              另需注意：<c>Attach</c> 是候选模块自己的代码，它可能启动监视器、全局快捷键一类的进程级副作用，
              这些副作用会和正式模块并存直到 <c>diana.trial.unload</c>。
              </remarks>
@@ -71,6 +76,15 @@
         </member>
         <member name="M:HistoryDiana.DianaTrialCommands.Tokenize(System.String)">
             <summary>按引号感知切分参数串；引号内的空格保留。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.RelayToFrontendAsync(HistoryVulcan.Core.Modules.IModuleContext,System.String,System.String,System.Threading.CancellationToken)">
+             <summary>
+             把一条命令递给已连接的 Vulcan 前端。
+            
+             走 <see cref="P:HistoryVulcan.Core.Commands.CommandBus.FrontendExecutor"/> 而不是 <c>Bus.ExecuteAsync</c>：后者会先在后台
+             注册表里找同名命令，而 <c>vulcan.module.trialui.*</c> 在后台只是一份前端代理，
+             绕开注册表直接投递少一层依赖，前端没连上时也能立刻给出确定的失败。
+             </summary>
         </member>
         <member name="T:HistoryDiana.DianaTrialCommands.TrialLoadContext">
             <summary>

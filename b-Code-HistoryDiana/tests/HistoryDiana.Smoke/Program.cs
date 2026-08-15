@@ -48,7 +48,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.10.1", moduleInfos[0].Version, "模块版本");
+    Equal("1.10.2", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
@@ -122,6 +122,30 @@ try
     True(opened.Success, "通道按 file 读取 z 内 Markdown");
     var escaped = await bus.ExecuteAsync("diana.docs.janus file=../secret.md", "smoke");
     True(!escaped.Success, "通道必须拒绝越出 z 的路径");
+
+    // ui=true 的界面由 Vulcan 前端创建，Diana 这个无窗进程只做中继。没有前端中继时必须
+    // 当场失败——静默退化成无界面试用，等于让人对着一份"验收过界面"的结论做决定。
+    var trialLoad = descriptors.Single(descriptor => descriptor.Name == "diana.trial.load");
+    var uiParameter = trialLoad.Parameters.SingleOrDefault(parameter => parameter.Name == "ui");
+    True(uiParameter is not null, "diana.trial.load 必须提供 ui 参数");
+    SequenceEqual(new[] { "true", "false" }, uiParameter!.AllowedValues!, "ui 参数只接受 true/false");
+
+    var candidateRoot = Path.Combine(temporaryRoot, "candidate", "z-HistoryDiana");
+    Directory.CreateDirectory(candidateRoot);
+    File.Copy(assembly.Location, Path.Combine(candidateRoot, "HistoryDiana.dll"));
+    File.WriteAllText(Path.Combine(candidateRoot, "module.manifest.json"),
+        """
+        {"schemaVersion":1,"type":"HistoryVulcan.Module","name":"HistoryDiana","version":"9.9.9","artifact":"HistoryDiana.dll","ui":true}
+        """);
+
+    True(bus.FrontendExecutor is null, "Smoke 的总线不接前端，才能验中继缺失时的行为");
+    var uiTrial = await bus.ExecuteAsync(
+        $"diana.trial.load path={candidateRoot} alias=smoke-ui ui=true", "smoke");
+    True(!uiTrial.Success, "没有前端中继时 ui=true 必须失败");
+    True(uiTrial.Message.Contains("前端", StringComparison.Ordinal), "失败说明必须点名前端中继");
+    var afterFailedUi = await bus.ExecuteAsync("diana.trial.list", "smoke");
+    True(afterFailedUi.Message.Contains("当前没有试用中的候选模块", StringComparison.Ordinal),
+        "ui=true 失败后不得残留试用条目");
 
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
         "程序集不得保留 ProjectPulse 类型");

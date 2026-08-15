@@ -22,7 +22,12 @@ namespace HistoryDiana;
 ///   只能经 <c>diana.trial.call</c> 调用，因此不会和正式模块的同名命令抢注册，
 ///   也不会出现在补全、面板和 MCP 工具表里。
 ///
-/// 代价是候选模块的 UI 不会被创建（不调用 IUiModule），能验的是命令行为本身。
+/// 默认不建界面，验的是命令行为本身；<c>ui=true</c> 走人工验收路径。**界面不在本进程创建**：
+/// Diana 住在无窗 <c>--service</c> 后台进程，那里没有 <c>IShellUiRegistrar</c> 也没有 Dispatcher，
+/// 而 WPF 对象不可能递过进程边界。候选程序集因此在前端再装一份——由宿主 3.11.4 的
+/// <c>vulcan.module.trialui.load/unload</c> 承接，本进程只经前端命令代理把请求递过去。
+/// 前端那份同样不进正式模块快照。
+///
 /// 另需注意：<c>Attach</c> 是候选模块自己的代码，它可能启动监视器、全局快捷键一类的进程级副作用，
 /// 这些副作用会和正式模块并存直到 <c>diana.trial.unload</c>。
 /// </remarks>
@@ -41,17 +46,20 @@ internal static class DianaTrialCommands
             Name = "diana.trial.load",
             Domain = "HistoryDiana",
             CommandClass = "trial",
-            Summary = "把指定 z 快照目录按调用面装载为候选模块（只进内存，不写盘、不做发现）",
+            Summary = "把指定 z 快照目录装载为候选模块（默认只进内存，ui=true 可创建验收界面）",
             Example = @"diana.trial.load path=F:\ai工作区\2026-020-HistoryJanus\71c79b7-1-x\z-HistoryJanus",
             Parameters =
             [
                 Text("path", "候选 z 快照目录的绝对路径，需含 module.manifest.json", required: true, position: 0),
                 Text("alias", "试用别名，省略时取清单里的模块名"),
+                Bool("ui", "Create UI for manual acceptance", "false"),
             ],
-            Handler = CommandDescriptor.Sync(context => Load(
+            Handler = async context => await LoadAsync(
                 host,
                 context.RequireString("path"),
-                context.GetString("alias"))),
+                context.GetString("alias"),
+                context.GetBool("ui"),
+                context.Cancellation).ConfigureAwait(false),
         });
 
         registry.Register(new CommandDescriptor
@@ -94,11 +102,17 @@ internal static class DianaTrialCommands
             Summary = "卸载候选模块，省略别名时全部卸载",
             Example = "diana.trial.unload alias=HistoryJanus",
             Parameters = [Text("alias", "要卸载的试用别名，省略表示全部", position: 0)],
-            Handler = CommandDescriptor.Sync(context => Unload(context.GetString("alias"))),
+            Handler = async context => await UnloadAsync(
+                host, context.GetString("alias"), context.Cancellation).ConfigureAwait(false),
         });
     }
 
-    private static CommandResult Load(IModuleContext host, string path, string? alias)
+    private static async Task<CommandResult> LoadAsync(
+        IModuleContext host,
+        string path,
+        string? alias,
+        bool createUi,
+        CancellationToken cancellation)
     {
         string root;
         try
@@ -143,6 +157,15 @@ internal static class DianaTrialCommands
         if (Trials.ContainsKey(key))
             return CommandResult.Fail($"别名 {key} 已在试用中，先 diana.trial.unload alias={key}。");
 
+        // 界面一律由前端建，Diana 自己不碰 IUiModule。Diana 住在无窗 --service 进程里：
+        // 那里没有 IShellUiRegistrar，也没有 Dispatcher，就地 new 一个 WPF 视图只会当场抛。
+        // 宿主 3.11.4 起用 vulcan.module.trialui.* 承接这件事，本进程只负责把请求递过去。
+        //
+        // 这道闸放在装载之前：可回收上下文的回收由 GC 决定，为一个必然失败的请求先把候选
+        // 程序集映射进来，会把那份 DLL 锁到下一次 GC——覆盖候选、删工作区都会跟着失败。
+        if (createUi && host.Bus.FrontendExecutor == null)
+            return CommandResult.Fail("ui=true 需要已连接的 Vulcan 前端；当前没有可用的前端中继。");
+
         var loadContext = new TrialLoadContext(key, assemblyPath);
         try
         {
@@ -160,7 +183,6 @@ internal static class DianaTrialCommands
                 if (type.GetConstructor(Type.EmptyTypes) == null)
                     continue;
 
-                // UI 一律不建：这条通道验的是调用面，建窗会把候选模块的窗口混进正式外壳。
                 var instance = (IModuleContextAware)Activator.CreateInstance(type)!;
                 instance.Attach(trialContext);
                 attached++;
@@ -174,11 +196,30 @@ internal static class DianaTrialCommands
 
             var commands = trialRegistry.All().Select(descriptor => descriptor.Name)
                 .OrderBy(name => name, StringComparer.Ordinal).ToList();
-            var trial = new TrialModule(key, moduleName, moduleVersion, root, loadContext, trialRegistry, commands);
+
+            // 先占别名再建界面：反过来的话，TryAdd 撞车时前端已经多出一个没人认领、
+            // 也没人卸得掉的窗口。
+            var trial = new TrialModule(
+                key, moduleName, moduleVersion, root, loadContext, trialRegistry, commands, createUi);
             if (!Trials.TryAdd(key, trial))
             {
                 loadContext.Unload();
                 return CommandResult.Fail($"别名 {key} 已被并发占用。");
+            }
+
+            if (createUi)
+            {
+                var relayResult = await RelayToFrontendAsync(
+                    host,
+                    $"vulcan.module.trialui.load path={CommandParser.QuoteArg(root)} alias={CommandParser.QuoteArg(key)}",
+                    key,
+                    cancellation).ConfigureAwait(false);
+                if (!relayResult.Success)
+                {
+                    Trials.TryRemove(key, out _);
+                    loadContext.Unload();
+                    return CommandResult.Fail($"前端试用界面创建失败：{relayResult.Message}");
+                }
             }
 
             var text = new StringBuilder();
@@ -197,6 +238,7 @@ internal static class DianaTrialCommands
                 Version = moduleVersion,
                 Source = root,
                 Commands = commands,
+                Ui = createUi ? "frontend" : "disabled",
             });
         }
         catch (Exception ex) when (ex is ReflectionTypeLoadException or BadImageFormatException
@@ -217,7 +259,8 @@ internal static class DianaTrialCommands
         var text = new StringBuilder($"试用中的候选模块: {Trials.Count} 个");
         foreach (var trial in Trials.Values.OrderBy(item => item.Alias, StringComparer.Ordinal))
         {
-            text.Append($"\n[{trial.Alias}] {trial.ModuleName} {trial.Version}  {trial.Commands.Count} 条命令");
+            text.Append($"\n[{trial.Alias}] {trial.ModuleName} {trial.Version}  {trial.Commands.Count} 条命令" +
+                        $"  UI={(trial.FrontendUi ? "前端" : "无")}");
             text.Append($"\n  来源: {trial.SourcePath}");
             foreach (var name in trial.Commands)
                 text.Append($"\n    {name}");
@@ -230,6 +273,7 @@ internal static class DianaTrialCommands
             trial.Version,
             Source = trial.SourcePath,
             trial.Commands,
+            Ui = trial.FrontendUi ? "frontend" : "disabled",
         }).ToList());
     }
 
@@ -379,7 +423,10 @@ internal static class DianaTrialCommands
             yield return current.ToString();
     }
 
-    private static CommandResult Unload(string? alias)
+    private static async Task<CommandResult> UnloadAsync(
+        IModuleContext host,
+        string? alias,
+        CancellationToken cancellation)
     {
         var targets = string.IsNullOrWhiteSpace(alias)
             ? Trials.Keys.ToList()
@@ -389,10 +436,28 @@ internal static class DianaTrialCommands
             return CommandResult.Ok("当前没有试用中的候选模块。");
 
         var unloaded = new List<string>();
+        var uiFailures = new List<string>();
         foreach (var key in targets)
         {
             if (!Trials.TryRemove(key, out var trial))
                 continue;
+
+            // 界面先拆再卸 ALC。前端拆不掉时只记一笔继续走：候选的命令面已经摘除，
+            // 把可回收上下文留在进程里换不回那个窗口，只会多留一份泄漏。
+            if (trial.FrontendUi)
+            {
+                var relayResult = await RelayToFrontendAsync(
+                    host,
+                    $"vulcan.module.trialui.unload alias={CommandParser.QuoteArg(trial.Alias)}",
+                    trial.Alias,
+                    cancellation).ConfigureAwait(false);
+                if (!relayResult.Success)
+                {
+                    uiFailures.Add($"{trial.Alias}: {relayResult.Message}");
+                    host.Log.Warn("diana.trial", $"前端试用界面卸载失败（{trial.Alias}）：{relayResult.Message}");
+                }
+            }
+
             trial.LoadContext.Unload();
             unloaded.Add($"{trial.Alias}({trial.ModuleName} {trial.Version})");
         }
@@ -401,7 +466,44 @@ internal static class DianaTrialCommands
             return CommandResult.Fail($"没有别名为 {alias} 的试用模块。");
 
         // 可回收上下文的真正回收由 GC 决定；命令面已经摘除，调用不到了。
-        return CommandResult.Ok($"已卸载 {unloaded.Count} 个候选模块：{string.Join("、", unloaded)}");
+        var text = $"已卸载 {unloaded.Count} 个候选模块：{string.Join("、", unloaded)}";
+        if (uiFailures.Count > 0)
+        {
+            text += $"\n前端界面未能拆除（需手工执行 vulcan.module.trialui.unload）：\n  " +
+                    string.Join("\n  ", uiFailures);
+        }
+        return CommandResult.Ok(text);
+    }
+
+    /// <summary>
+    /// 把一条命令递给已连接的 Vulcan 前端。
+    ///
+    /// 走 <see cref="CommandBus.FrontendExecutor"/> 而不是 <c>Bus.ExecuteAsync</c>：后者会先在后台
+    /// 注册表里找同名命令，而 <c>vulcan.module.trialui.*</c> 在后台只是一份前端代理，
+    /// 绕开注册表直接投递少一层依赖，前端没连上时也能立刻给出确定的失败。
+    /// </summary>
+    private static async Task<CommandResult> RelayToFrontendAsync(
+        IModuleContext host,
+        string commandText,
+        string alias,
+        CancellationToken cancellation)
+    {
+        var relay = host.Bus.FrontendExecutor;
+        if (relay == null)
+            return CommandResult.Fail("没有可用的 Vulcan 前端中继。");
+
+        try
+        {
+            return await relay(commandText, $"diana.trial:{alias}", cancellation).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return CommandResult.Fail($"前端中继异常 {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private static ParameterSpec Text(string name, string description, bool required = false, int? position = null)
@@ -413,6 +515,15 @@ internal static class DianaTrialCommands
             Position = position,
         };
 
+    private static ParameterSpec Bool(string name, string description, string defaultValue)
+        => new()
+        {
+            Name = name,
+            Description = description,
+            Default = defaultValue,
+            AllowedValues = ["true", "false"],
+        };
+
     private sealed record TrialModule(
         string Alias,
         string ModuleName,
@@ -420,7 +531,8 @@ internal static class DianaTrialCommands
         string SourcePath,
         TrialLoadContext LoadContext,
         CommandRegistry Registry,
-        IReadOnlyList<string> Commands);
+        IReadOnlyList<string> Commands,
+        bool FrontendUi);
 
     /// <summary>
     /// 候选模块的可回收装载上下文。

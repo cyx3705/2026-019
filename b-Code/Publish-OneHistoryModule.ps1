@@ -107,6 +107,11 @@ function Get-VulcanFormalExecutable {
     return $hostExecutable
 }
 
+# 调用方一律写成 @(Get-VulcanFormalProcesses)：函数返回数组时 PowerShell 会把它摊进管线，
+# 空数组因此摊成 $null，而 StrictMode 下 $null.Count 直接抛「找不到属性 Count」。
+# 这条路径平时不走——模块发布时 Vulcan 通常开着——直到先促级宿主（管线会停掉它）
+# 再促级模块，才第一次撞上。不要改成 `,@()` 包一层：那会让 @() 收集到「一个空数组」，
+# Count 变成 1，宿主没运行也判成在运行，后面按进程对象用它就更难查了。
 function Get-VulcanFormalProcesses {
     $hostExecutable = Get-VulcanFormalExecutable
     if ([string]::IsNullOrWhiteSpace($hostExecutable) -or
@@ -124,7 +129,7 @@ function Get-VulcanFormalProcesses {
 }
 
 function Test-VulcanFormalProcessRunning {
-    return (Get-VulcanFormalProcesses).Count -gt 0
+    return @(Get-VulcanFormalProcesses).Count -gt 0
 }
 
 function Stop-VulcanFormalProcesses {
