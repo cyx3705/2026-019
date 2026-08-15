@@ -207,7 +207,7 @@ internal static class DianaReleaseCommands
         if (publish)
             command.Append(" -Publish");
         if (projectRootOverride != null)
-            command.Append($" -ProjectRoot {Quote(projectRootOverride)}");
+            command.Append($" -SourceWorktree {Quote(projectRootOverride)}");
         // 退出码单独落一个纯 ASCII 文件，不往日志里追加：`*>` 重定向用的是控制台编码，
         // 再用 Out-File 追加会混进另一种编码，实测哨兵行被写成 UTF-16 而无法解析。
         command.Append($" *> {Quote(logPath)}; ");

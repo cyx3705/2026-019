@@ -6,7 +6,9 @@ param(
     [switch]$RequireCleanSource,
     # AI 工作区里的提交级验证：从指定工作树构建并跑门禁。促级永远只从主树来，
     # 因此本参数与 -Publish 互斥——否则 z 会指向一份没人能复现的工作树产物。
-    [string]$ProjectRoot
+    # 不能叫 ProjectRoot：PowerShell 变量大小写不敏感，会和脚本内的 $projectRoot 撞成同一个，
+    # 被后者覆盖后判断恒真，表现为主树构建也去传工作树参数。
+    [string]$SourceWorktree
 )
 
 $ErrorActionPreference = 'Stop'
@@ -504,11 +506,11 @@ $definition = $definitions[$Module]
 if ($null -eq $definition) {
     throw "Module '$Module' is not registered. Add a kind=module entry to $registryPath."
 }
-if (-not [string]::IsNullOrWhiteSpace($ProjectRoot)) {
+if (-not [string]::IsNullOrWhiteSpace($SourceWorktree)) {
     if ($Publish) {
-        throw '-ProjectRoot 只用于工作区门禁验证，不能与 -Publish 同用：正式促级必须从主树构建。'
+        throw '-SourceWorktree 只用于工作区门禁验证，不能与 -Publish 同用：正式促级必须从主树构建。'
     }
-    $projectRoot = [IO.Path]::GetFullPath($ProjectRoot)
+    $projectRoot = [IO.Path]::GetFullPath($SourceWorktree)
     if (-not (Test-Path -LiteralPath $projectRoot -PathType Container)) {
         throw "指定的工作树不存在: $projectRoot"
     }
@@ -555,10 +557,17 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceCommit)) {
 
 New-Item -ItemType Directory -Force -Path $workRoot | Out-Null
 try {
-    Invoke-Checked 'powershell.exe' @(
+    # 从工作树构建时，工作树在库根之外，构建脚本自己那条"同库根"的相对路径必然指空，
+    # 因此把真实的宿主快照根显式传下去。主树构建时不传，脚本沿用原有缺省，行为不变。
+    $buildArguments = @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $projectRoot $definition.BuildScript),
         '-Configuration', 'Release', '-OutputRoot', $candidateRoot
-    ) $projectRoot 'Build candidate package'
+    )
+    if (-not [string]::IsNullOrWhiteSpace($SourceWorktree)) {
+        $hostSnapshot = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-HistoryVulcan'
+        $buildArguments += @('-HistoryVulcanPackageRoot', $hostSnapshot)
+    }
+    Invoke-Checked 'powershell.exe' $buildArguments $projectRoot 'Build candidate package'
     Assert-ModuleSnapshot $candidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
 
     if ($definition.Kind -eq 'module') {
