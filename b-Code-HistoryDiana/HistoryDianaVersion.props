@@ -1,4 +1,4 @@
-﻿<Project>
+<Project>
   <PropertyGroup>
     <HistoryDianaVersion>1.7.2</HistoryDianaVersion>
     <VersionPrefix>$(HistoryDianaVersion)</VersionPrefix>
