@@ -61,7 +61,8 @@
                只能经 <c>diana.trial.call</c> 调用，因此不会和正式模块的同名命令抢注册，
                也不会出现在补全、面板和 MCP 工具表里。
             
-             默认不建界面，验的是命令行为本身；<c>ui=true</c> 走人工验收路径。**界面不在本进程创建**：
+             MCP 默认 <c>ui=true</c>：一条命令完成卸同名正式模块、内存试用和前端验收界面。
+             只验调用面时显式 <c>ui=false</c>。**界面不在本进程创建**：
              Diana 住在无窗 <c>--service</c> 后台进程，那里没有 <c>IShellUiRegistrar</c> 也没有 Dispatcher，
              而 WPF 对象不可能递过进程边界。候选程序集因此在前端再装一份——由宿主 3.11.4 的
              <c>vulcan.module.trialui.load/unload</c> 承接，本进程只经前端命令代理把请求递过去。
@@ -80,6 +81,12 @@
         </member>
         <member name="M:HistoryDiana.DianaTrialCommands.Tokenize(System.String)">
             <summary>按引号感知切分参数串；引号内的空格保留。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.ReleaseForWorktreeAsync(HistoryVulcan.Core.Modules.IModuleContext,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            回收工作区前释放试用：字典里的候选、前端残留界面，以及可回收 ALC 仍锁着的 DLL。
+            Diana 热重载会丢掉静态 <see cref="F:HistoryDiana.DianaTrialCommands.Trials"/>，但前端试用程序集和工作区文件还在。
+            </summary>
         </member>
         <member name="M:HistoryDiana.DianaTrialCommands.RelayToFrontendAsync(HistoryVulcan.Core.Modules.IModuleContext,System.String,System.String,System.Threading.CancellationToken)">
              <summary>
