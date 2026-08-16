@@ -4,8 +4,9 @@ param(
     [switch]$Publish,
     [switch]$AllowDirtySource,
     [switch]$RequireCleanSource,
-    # AI 工作区里的提交级验证：从指定工作树构建并跑门禁。促级永远只从主树来，
-    # 因此本参数与 -Publish 互斥——否则 z 会指向一份没人能复现的工作树产物。
+    # AI 工作区里的提交级验证：从指定工作树构建并跑门禁。正式 Clio z 的 -Publish
+    # 永远只从主树来，因此本参数与 -Publish 互斥。无 -Publish 时，工作树把已验证
+    # 候选写入该树自己的 z-*（宿主不扫描），供 diana.release.cycle 试用装载。
     # 不能叫 ProjectRoot：PowerShell 变量大小写不敏感，会和脚本内的 $projectRoot 撞成同一个，
     # 被后者覆盖后判断恒真，表现为主树构建也去传工作树参数。
     [string]$SourceWorktree
@@ -481,7 +482,7 @@ if (-not [string]::IsNullOrWhiteSpace($SourceWorktree)) {
     if (-not (Test-Path -LiteralPath $projectRoot -PathType Container)) {
         throw "指定的工作树不存在: $projectRoot"
     }
-    Write-Host "[$Module] 从工作树构建并验证(不促级): $projectRoot"
+    Write-Host "[$Module] 从工作树构建并验证，写入该树 z-*（不写正式 Clio z）: $projectRoot"
 }
 else {
     $projectRoot = Assert-ChildPath (Join-Path $projectsRoot $definition.ProjectDirectory) $projectsRoot 'Module project'
@@ -573,6 +574,16 @@ try {
     Assert-ModuleSnapshot $candidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
 
     if (-not $Publish) {
+        if ($SourceWorktree) {
+            Write-Host "Writing worktree candidate into $formalRoot (host does not scan this path)..."
+            New-Item -ItemType Directory -Force -Path $formalRoot | Out-Null
+            Sync-FormalSnapshotInPlace $candidateRoot $formalRoot
+            Assert-ModuleSnapshot $formalRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+            Write-Host "Worktree candidate z is ready: $formalRoot"
+            Write-Host 'Host scan roots still ignore worktree z-*; diana.release.cycle will trial-load it in memory.'
+            return
+        }
+
         Write-Host "Verified candidate $Module ${moduleVersion}: $candidateRoot"
         Write-Host 'Pass -Publish to promote the candidate, including z/docs.'
         return

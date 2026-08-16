@@ -48,7 +48,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.10.3", moduleInfos[0].Version, "模块版本");
+    Equal("1.10.4", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
@@ -80,18 +80,27 @@ try
     classCount = descriptors.Select(descriptor => descriptor.CommandClass!)
         .Distinct(StringComparer.Ordinal)
         .Count();
-    // Diana 默认只读。写操作必须逐条列名，不能靠"新命令自然就不只读"混进来：
-    // relay.call 真的调用外部工具；trial.load/call/unload 装载并执行候选模块的任意代码。
+    // Diana 默认只读。写操作必须逐条列名，不能靠"新命令自然就不只读"混进来。
     var writeCommands = new HashSet<string>(StringComparer.Ordinal)
     {
-        "diana.relay.call", "diana.trial.load", "diana.trial.call", "diana.trial.unload",
-        "diana.release.start",
-        "diana.worktree.root", "diana.worktree.create", "diana.worktree.remove",
+        "diana.relay.call", "diana.trial.call", "diana.trial.unload",
+        "diana.release.cycle",
+        "diana.worktree.root", "diana.worktree.create", "diana.worktree.merge",
     };
     True(
         descriptors.Where(descriptor => !writeCommands.Contains(descriptor.Name))
             .All(descriptor => descriptor.Readonly),
         "除显式列名的写命令外，所有 Diana 命令必须声明为只读");
+    Equal(7, writeCommands.Count, "写命令白名单条数");
+    True(names.Contains("diana.release.cycle"), "缺少 diana.release.cycle");
+    True(names.Contains("diana.worktree.merge"), "缺少 diana.worktree.merge");
+    True(!names.Contains("diana.release.start"), "不得再登记 diana.release.start，改走 cycle");
+    True(!names.Contains("diana.trial.load"), "不得再登记 diana.trial.load，改由 cycle 装载");
+    True(!names.Contains("diana.worktree.remove"), "不得再登记 diana.worktree.remove，改走 merge");
+    Equal("缺少必填参数: name=", bus.Validate("diana.release.cycle"), "cycle 必须要求 name");
+    Equal("缺少必填参数: msg=", bus.Validate("diana.release.cycle name=HistoryJanus"), "cycle 必须要求 msg");
+    Equal("缺少必填参数: project=", bus.Validate("diana.worktree.merge"), "merge 必须要求 project");
+    Equal("缺少必填参数: name=", bus.Validate("diana.worktree.merge project=2026-020-HistoryJanus"), "merge 必须要求 name");
 
     Equal(null, bus.Validate($"diana.project.summary name={projectName}"), "summary 命令校验");
     Equal(null, bus.Validate($"diana.project.recent name={projectName} days=1 limit=10"), "recent 命令校验");
@@ -125,9 +134,10 @@ try
 
     // ui=true 的界面由 Vulcan 前端创建，Diana 这个无窗进程只做中继。没有前端中继时必须
     // 当场失败——静默退化成无界面试用，等于让人对着一份"验收过界面"的结论做决定。
-    var trialLoad = descriptors.Single(descriptor => descriptor.Name == "diana.trial.load");
-    var uiParameter = trialLoad.Parameters.SingleOrDefault(parameter => parameter.Name == "ui");
-    True(uiParameter is not null, "diana.trial.load 必须提供 ui 参数");
+    // 装载不再登记 MCP，由 cycle 内部调用；Smoke 直接打内部入口。
+    var cycle = descriptors.Single(descriptor => descriptor.Name == "diana.release.cycle");
+    var uiParameter = cycle.Parameters.SingleOrDefault(parameter => parameter.Name == "ui");
+    True(uiParameter is not null, "diana.release.cycle 必须提供 ui 参数");
     SequenceEqual(new[] { "true", "false" }, uiParameter!.AllowedValues!, "ui 参数只接受 true/false");
 
     var candidateRoot = Path.Combine(temporaryRoot, "candidate", "z-HistoryDiana");
@@ -139,8 +149,8 @@ try
         """);
 
     True(bus.FrontendExecutor is null, "Smoke 的总线不接前端，才能验中继缺失时的行为");
-    var uiTrial = await bus.ExecuteAsync(
-        $"diana.trial.load path={candidateRoot} alias=smoke-ui ui=true", "smoke");
+    var uiTrial = await DianaTrialCommands.LoadFromPathAsync(
+        context, candidateRoot, "smoke-ui", createUi: true, CancellationToken.None);
     True(!uiTrial.Success, "没有前端中继时 ui=true 必须失败");
     True(uiTrial.Message.Contains("前端", StringComparison.Ordinal), "失败说明必须点名前端中继");
     var afterFailedUi = await bus.ExecuteAsync("diana.trial.list", "smoke");
@@ -215,8 +225,8 @@ try
         return Task.FromResult(CommandResult.Ok("frontend-ok"));
     };
 
-    var dianaUi = await bus.ExecuteAsync(
-        $"diana.trial.load path={candidateRoot} alias=smoke-ui ui=true", "smoke");
+    var dianaUi = await DianaTrialCommands.LoadFromPathAsync(
+        context, candidateRoot, "smoke-ui", createUi: true, CancellationToken.None);
     True(dianaUi.Success, "HistoryDiana 候选 ui=true 在有前端时应成功");
     Equal(0, unloadCalls.Count, "不得卸载 HistoryDiana 自己");
     True(frontendCalls.Exists(call => call.StartsWith("vulcan.module.trialui.load", StringComparison.Ordinal)),
@@ -229,8 +239,8 @@ try
     Equal(0, reloadCount, "未腾出正式模块时不得 reload");
 
     frontendCalls.Clear();
-    var janusUi = await bus.ExecuteAsync(
-        $"diana.trial.load path={janusRoot} alias=smoke-janus ui=true", "smoke");
+    var janusUi = await DianaTrialCommands.LoadFromPathAsync(
+        context, janusRoot, "smoke-janus", createUi: true, CancellationToken.None);
     True(janusUi.Success, "同名正式模块已装载时 ui=true 应先卸再装试用界面");
     SequenceEqual(new[] { "HistoryJanus" }, unloadCalls, "应卸载正式 HistoryJanus");
     True(janusUi.Message.Contains("已先卸载正式模块 HistoryJanus", StringComparison.Ordinal),
@@ -249,8 +259,8 @@ try
     unloadCalls.Clear();
     loadedFormal.Remove("HistoryJanus");
     frontendCalls.Clear();
-    var janusSkip = await bus.ExecuteAsync(
-        $"diana.trial.load path={janusRoot} alias=smoke-janus-skip ui=true", "smoke");
+    var janusSkip = await DianaTrialCommands.LoadFromPathAsync(
+        context, janusRoot, "smoke-janus-skip", createUi: true, CancellationToken.None);
     True(janusSkip.Success, "正式模块未装载时 ui=true 仍应建界面");
     Equal(0, unloadCalls.Count, "正式模块未装载时不得调用 unload");
     True(frontendCalls.Exists(call => call.StartsWith("vulcan.module.trialui.load", StringComparison.Ordinal)),
@@ -280,8 +290,8 @@ try
             "HistoryJanus 4.0.0 (40 条指令)",
             new[] { new { ModuleName = "HistoryJanus" } })),
     });
-    var missingUnload = await isolatedBus.ExecuteAsync(
-        $"diana.trial.load path={janusRoot} alias=need-unload ui=true", "smoke");
+    var missingUnload = await DianaTrialCommands.LoadFromPathAsync(
+        isolatedContext, janusRoot, "need-unload", createUi: true, CancellationToken.None);
     True(!missingUnload.Success, "宿主没有 vulcan.module.unload 时 ui=true 必须失败");
     True(missingUnload.Message.Contains("3.11.5", StringComparison.Ordinal),
         "失败说明必须点名宿主 3.11.5");

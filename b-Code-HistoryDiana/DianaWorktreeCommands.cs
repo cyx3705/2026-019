@@ -77,22 +77,21 @@ internal static class DianaWorktreeCommands
 
         registry.Register(new CommandDescriptor
         {
-            Name = "diana.worktree.remove",
+            Name = "diana.worktree.merge",
             Domain = "HistoryDiana",
             CommandClass = "worktree",
-            Summary = "回收一个 AI 工作区；分支保留，不删提交",
-            Example = "diana.worktree.remove project=2026-020-HistoryJanus name=71c79b7-2-cachekey",
+            Summary = "把 AI 工作区分支并回 main，卸试用并回收工作区（分支保留）",
+            Example = "diana.worktree.merge project=2026-020-HistoryJanus name=71c79b7-1-codex-fix",
             Parameters =
             [
                 Text("project", "项目目录名", required: true, position: 0),
                 Text("name", "工作区目录名", required: true, position: 1),
-                Bool("force", "有未提交改动时是否强制移除", "false"),
             ],
-            Handler = CommandDescriptor.Sync(context => Remove(
-                host.Settings,
+            Handler = async context => await MergeAsync(
+                host,
                 context.RequireString("project"),
                 context.RequireString("name"),
-                context.GetBool("force"))),
+                context.Cancellation).ConfigureAwait(false),
         });
     }
 
@@ -154,7 +153,7 @@ internal static class DianaWorktreeCommands
             if (idle != null)
             {
                 return CommandResult.Fail(
-                    $"项目已有闲置工作区 {idle}（无提交、无改动）。接着用它，或先 diana.worktree.remove；"
+                    $"项目已有闲置工作区 {idle}（无提交、无改动）。接着用它，或先 diana.worktree.merge 回收；"
                     + "确实需要并行再开时传 confirm=true。");
             }
         }
@@ -242,6 +241,84 @@ internal static class DianaWorktreeCommands
         return error == null ? branch : "HEAD";
     }
 
+    private static async Task<CommandResult> MergeAsync(
+        IModuleContext host,
+        string project,
+        string name,
+        CancellationToken cancellation)
+    {
+        var projectName = project.Trim();
+        var worktreeName = name.Trim();
+        var projectPath = Path.Combine(DianaLibraryRoot.Resolve(host.Settings), projectName);
+        if (!Directory.Exists(projectPath))
+            return CommandResult.Fail($"项目不存在：{projectPath}");
+
+        var worktreePath = ResolveWorktreePath(host.Settings, projectName, worktreeName);
+        if (!Directory.Exists(worktreePath))
+            return CommandResult.Fail($"工作区不存在：{worktreePath}");
+
+        var (status, statusError) = Git(worktreePath, "status", "--porcelain");
+        if (statusError != null)
+            return CommandResult.Fail($"读取工作区状态失败：{statusError}");
+        if (!string.IsNullOrWhiteSpace(status))
+            return CommandResult.Fail("工作区还有未提交改动，先 diana.release.cycle。");
+
+        var mainHead = ReadBranch(projectPath);
+        if (!string.Equals(mainHead, "main", StringComparison.Ordinal))
+            return CommandResult.Fail($"主树当前在 {mainHead}，合并要求主树在 main。");
+
+        var branch = ReadBranch(worktreePath);
+        if (string.IsNullOrWhiteSpace(branch) || branch == "HEAD")
+            return CommandResult.Fail("无法读取工作区分支名。");
+
+        if (DianaReleaseCommands.TryResolveModuleByProject(host.Settings, projectName, out var module))
+        {
+            await DianaTrialCommands.UnloadMatchingAsync(host, module.Name, worktreePath, cancellation)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await DianaTrialCommands.UnloadMatchingAsync(host, null, worktreePath, cancellation)
+                .ConfigureAwait(false);
+        }
+
+        var (ffOutput, ffError) = Git(projectPath, "merge", "--ff-only", branch);
+        string mergeNote;
+        if (ffError == null)
+        {
+            mergeNote = $"已快进合并 {branch}";
+        }
+        else
+        {
+            var (mergeOutput, mergeError) = Git(projectPath, "merge", "--no-edit", branch);
+            if (mergeError != null)
+            {
+                return CommandResult.Fail(
+                    $"无法把 {branch} 并入 main：{mergeError}\n{mergeOutput}\n{ffOutput}");
+            }
+
+            mergeNote = $"已合并 {branch}（非快进）";
+        }
+
+        var reload = await host.Bus.ExecuteAsync("vulcan.module.reload", "diana.worktree.merge")
+            .ConfigureAwait(false);
+        var reloadNote = reload.Success
+            ? "已 vulcan.module.reload 装入合并后的正式 z"
+            : $"合并后热重载未成功（{reload.Message}），请手工 vulcan.module.reload";
+
+        var removed = Remove(host.Settings, projectName, worktreeName, force: true, skipUnmergedGate: true);
+
+        var text = new StringBuilder($"{mergeNote}。\n{reloadNote}\n{removed.Message}");
+        if (!removed.Success)
+            return CommandResult.Fail(text.ToString());
+        return CommandResult.Ok(text.ToString(), new
+        {
+            Project = projectName,
+            Branch = branch,
+            Worktree = worktreePath,
+        });
+    }
+
     private static CommandResult List(ISettingsService settings, string? project)
     {
         var root = ResolveRoot(settings, null);
@@ -279,29 +356,41 @@ internal static class DianaWorktreeCommands
             rows);
     }
 
-    private static CommandResult Remove(ISettingsService settings, string project, string name, bool force)
+    private static CommandResult Remove(
+        ISettingsService settings, string project, string name, bool force, bool skipUnmergedGate = false)
     {
-        var root = ResolveRoot(settings, null);
-        var worktreePath = Path.Combine(root, project.Trim(), name.Trim());
-        if (!Directory.Exists(worktreePath))
-            return CommandResult.Fail($"工作区不存在：{worktreePath}");
-
-        var projectPath = Path.Combine(DianaLibraryRoot.Resolve(settings), project.Trim());
+        var projectName = project.Trim();
+        var worktreeName = name.Trim();
+        var projectPath = Path.Combine(DianaLibraryRoot.Resolve(settings), projectName);
         if (!Directory.Exists(projectPath))
             return CommandResult.Fail($"项目不存在：{projectPath}");
 
-        // 有未并回主干的提交时默认拒绝：工作区可再生，提交不可。force 只覆盖 git 自己的
-        // 脏工作区检查，覆盖不了"提交会失去落脚点"这件事，所以这道闸门单独判。
-        var (unmerged, _) = Git(projectPath, "rev-list", "--count", $"main..{ReadBranch(worktreePath)}");
-        if (!force && int.TryParse(unmerged, out var pending) && pending > 0)
+        var worktreePath = ResolveWorktreePath(settings, projectName, worktreeName);
+        if (!Directory.Exists(worktreePath)
+            && FindListedWorktree(projectPath, worktreeName) is null)
         {
-            return CommandResult.Fail(
-                $"该工作区的分支有 {pending} 个提交未并回 main。先合并，或确认要丢弃后传 force=true。");
+            return CommandResult.Fail($"工作区不存在：{Path.Combine(ResolveRoot(settings, null), projectName, worktreeName)}");
         }
 
+        var listed = FindListedWorktree(projectPath, worktreeName) ?? worktreePath;
+        var branch = Directory.Exists(worktreePath) ? ReadBranch(worktreePath) : ReadBranch(listed);
+
+        if (!skipUnmergedGate)
+        {
+            // 有未并回主干的提交时默认拒绝：工作区可再生，提交不可。force 只覆盖 git 自己的
+            // 脏工作区检查，覆盖不了"提交会失去落脚点"这件事，所以这道闸门单独判。
+            var (unmerged, _) = Git(projectPath, "rev-list", "--count", $"main..{branch}");
+            if (!force && int.TryParse(unmerged, out var pending) && pending > 0)
+            {
+                return CommandResult.Fail(
+                    $"该工作区的分支有 {pending} 个提交未并回 main。先 diana.worktree.merge，或确认要丢弃后由 merge 以外的 git 操作回收。");
+            }
+        }
+
+        var gitPath = listed;
         var arguments = force
-            ? new[] { "worktree", "remove", "--force", worktreePath }
-            : ["worktree", "remove", worktreePath];
+            ? new[] { "worktree", "remove", "--force", gitPath }
+            : ["worktree", "remove", gitPath];
         var (_, error) = Git(projectPath, arguments);
         if (error != null)
         {
@@ -310,11 +399,79 @@ internal static class DianaWorktreeCommands
                 : $"移除失败（有未提交改动时加 force=true）：{error}");
         }
 
-        return CommandResult.Ok($"已回收工作区 {name.Trim()}，分支保留未删。", new { Path = worktreePath });
+        Git(projectPath, "worktree", "prune");
+        var leftover = TryDeleteDirectory(worktreePath);
+        if (!string.Equals(listed, worktreePath, StringComparison.OrdinalIgnoreCase))
+        {
+            var extra = TryDeleteDirectory(listed);
+            leftover = leftover == null ? extra : extra == null ? leftover : leftover + "\n" + extra;
+        }
+        var text = $"已回收工作区 {worktreeName}，分支保留未删。";
+        if (leftover != null)
+            text += "\n" + leftover;
+        return CommandResult.Ok(text, new { Path = worktreePath });
     }
 
     /// <summary>供同模块的其他命令解析工作区根，避免第二处默认值。</summary>
     internal static string ResolveRootPublic(ISettingsService settings) => ResolveRoot(settings, null);
+
+    internal static string ResolveWorktreePath(ISettingsService settings, string project, string nameOrPath)
+    {
+        var value = nameOrPath.Trim();
+        if (Path.IsPathFullyQualified(value))
+            return value;
+
+        var projectPath = Path.Combine(DianaLibraryRoot.Resolve(settings), project.Trim());
+        var listed = FindListedWorktree(projectPath, value);
+        if (!string.IsNullOrWhiteSpace(listed) && Directory.Exists(listed))
+            return listed;
+
+        return Path.Combine(ResolveRoot(settings, null), project.Trim(), value);
+    }
+
+    private static string? FindListedWorktree(string projectPath, string name)
+    {
+        if (!Directory.Exists(projectPath))
+            return null;
+
+        var (output, error) = Git(projectPath, "worktree", "list", "--porcelain");
+        if (error != null)
+            return null;
+
+        foreach (var raw in output.Split('\n'))
+        {
+            var line = raw.TrimEnd('\r');
+            if (!line.StartsWith("worktree ", StringComparison.Ordinal))
+                continue;
+            var path = line["worktree ".Length..];
+            if (string.Equals(Path.GetFileName(path.TrimEnd('/', '\\')), name, StringComparison.OrdinalIgnoreCase))
+                return path;
+        }
+
+        return null;
+    }
+
+    private static string? TryDeleteDirectory(string path)
+    {
+        if (!Directory.Exists(path))
+            return null;
+
+        try
+        {
+            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
+                File.Delete(file);
+            }
+
+            Directory.Delete(path, recursive: true);
+            return Directory.Exists(path) ? $"工作区目录仍在：{path}" : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"残留目录未能删除：{path}（{ex.Message}）";
+        }
+    }
 
     private static string ResolveRoot(ISettingsService settings, string? rootOverride)
     {
@@ -344,7 +501,7 @@ internal static class DianaWorktreeCommands
                 return ("", "无法启动 git");
             var output = process.StandardOutput.ReadToEnd();
             var error = process.StandardError.ReadToEnd();
-            process.WaitForExit(60_000);
+            process.WaitForExit(180_000);
             return process.ExitCode == 0
                 ? (output.Trim(), null)
                 : (output.Trim(), string.IsNullOrWhiteSpace(error) ? $"git 退出码 {process.ExitCode}" : error.Trim());

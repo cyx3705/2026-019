@@ -28,14 +28,14 @@ Diana 不提供 UI 页面。
 不熟悉 OneHistory 的结构时，按顺序读：
 
 1. 要开发模块，先读[模块开发手册](./b-Office-Diana/package/模块开发手册.md)，按其中的
-   `docs → worktree → release(candidate) → trial → main → release(publish) → commit → remove` 流程执行。
+   `docs → worktree.create → release.cycle →（继续开发或 worktree.merge）` 流程执行。
 2. 需要跨项目说明书时，先执行 `diana.docs.catalog`，把索引留在对话中，再读取对应 z 通道；
    不打开其他模块 worktree，也不从 Diana 本地目录寻找副本。
 
 ## 指令
 
-七类。当前固定 26 条命令，另按现场 z 动态登记 `diana.docs.<域>`；不要写死动态通道总数。
-命令按描述符投影为 MCP：只读命令是 `readonly`，八条显式写命令是 `standard`。
+七类。当前固定 25 条命令，另按现场 z 动态登记 `diana.docs.<域>`；不要写死动态通道总数。
+命令按描述符投影为 MCP：只读命令是 `readonly`，七条显式写命令是 `standard`。
 
 | 类 | 指令 | 用途 |
 | --- | --- | --- |
@@ -45,12 +45,12 @@ Diana 不提供 UI 页面。
 | `relay` | `diana.relay.list` / `describe` / `call` | 按当前 MCP 策略实时列举与调用工具，绕开会话里的旧快照 |
 | `docs` | `diana.docs.catalog` | 现场扫描全部 z 通道；跨项目读文档前必须先执行，把索引留在对话里 |
 | `docs` | `diana.docs.<域>` | 一个 z 文件夹一条通道；省略 file 只列出，带 file 才读一篇 |
-| `worktree` | `diana.worktree.root` / `create` / `list` / `remove` | 建立、查看和回收 AI 隔离工作树 |
-| `release` | `diana.release.modules` / `start` / `status` / `log` | 从主树或 AI 工作树启动候选/正式管线并追踪日志 |
-| `trial` | `diana.trial.load` / `list` / `call` / `unload` | 候选模块只进内存的调用型试用，不进入正式注册表 |
+| `worktree` | `diana.worktree.root` / `create` / `list` / `merge` | 建立、查看 AI 隔离工作树，或并回 main 并回收 |
+| `release` | `diana.release.modules` / `status` / `log` / `cycle` | cycle 跑完门禁并提交；status/log 只读排障 |
+| `trial` | `diana.trial.list` / `call` / `unload` | 候选模块只进内存的调用型试用；装载由 cycle 完成 |
 
-八条 `standard` 写命令是 `relay.call`、`release.start`、`trial.load/call/unload`、
-`worktree.root/create/remove`；其余命令均为 `readonly`。候选模块自己的命令不会直接进入 MCP 工具表，
+七条 `standard` 写命令是 `relay.call`、`release.cycle`、`trial.call/unload`、
+`worktree.root/create/merge`；其余命令均为 `readonly`。候选模块自己的命令不会直接进入 MCP 工具表，
 只能通过 `diana.trial.call` 调用。
 
 ## 构建与验证
@@ -69,7 +69,7 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 即完成部署。模块发布不要关闭 Vulcan：宿主从内存加载 DLL，覆盖 z 后执行 `vulcan.module.reload`
 （管线在正式宿主运行时会自己调）。只有替换宿主 EXE 才需要停进程。
 
-当前 Diana 源码为 `1.10.3`；正式 `z-HistoryDiana` 仍为 `1.10.2`，直至本版本发布。
+当前 Diana 源码为 `1.10.4`；正式 `z-HistoryDiana` 仍为 `1.10.2`，直至本版本发布。
 
 ## 集中发布
 

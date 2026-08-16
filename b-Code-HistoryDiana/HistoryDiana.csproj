@@ -18,6 +18,9 @@
     <HistoryVulcanHostDir Condition="'$(HistoryVulcanHostDir)' == ''">$(HistoryVulcanPackageRoot)\host</HistoryVulcanHostDir>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="HistoryDiana.Smoke" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="HistoryVulcan.Core">
       <HintPath>$(HistoryVulcanHostDir)\HistoryVulcan.Core.dll</HintPath>
       <Private>false</Private>

@@ -47,27 +47,6 @@ internal static class DianaTrialCommands
 
         registry.Register(new CommandDescriptor
         {
-            Name = "diana.trial.load",
-            Domain = "HistoryDiana",
-            CommandClass = "trial",
-            Summary = "把指定 z 快照目录装载为候选模块（默认只进内存，ui=true 可创建验收界面；若正式模块已装载会先卸载）",
-            Example = @"diana.trial.load path=F:\ai工作区\2026-020-HistoryJanus\71c79b7-1-x\z-HistoryJanus",
-            Parameters =
-            [
-                Text("path", "候选 z 快照目录的绝对路径，需含 module.manifest.json", required: true, position: 0),
-                Text("alias", "试用别名，省略时取清单里的模块名"),
-                Bool("ui", "Create UI for manual acceptance", "false"),
-            ],
-            Handler = async context => await LoadAsync(
-                host,
-                context.RequireString("path"),
-                context.GetString("alias"),
-                context.GetBool("ui"),
-                context.Cancellation).ConfigureAwait(false),
-        });
-
-        registry.Register(new CommandDescriptor
-        {
             Name = "diana.trial.list",
             Domain = "HistoryDiana",
             CommandClass = "trial",
@@ -110,6 +89,14 @@ internal static class DianaTrialCommands
                 host, context.GetString("alias"), context.Cancellation).ConfigureAwait(false),
         });
     }
+
+    internal static Task<CommandResult> LoadFromPathAsync(
+        IModuleContext host,
+        string path,
+        string? alias,
+        bool createUi,
+        CancellationToken cancellation)
+        => LoadAsync(host, path, alias, createUi, cancellation);
 
     private static async Task<CommandResult> LoadAsync(
         IModuleContext host,
@@ -308,7 +295,7 @@ internal static class DianaTrialCommands
         CancellationToken cancellation)
     {
         if (Trials.IsEmpty)
-            return CommandResult.Fail("当前没有试用中的候选模块，先 diana.trial.load。");
+            return CommandResult.Fail("当前没有试用中的候选模块，先 diana.release.cycle。");
 
         var candidates = Trials.Values
             .Where(trial => string.IsNullOrWhiteSpace(alias)
@@ -507,6 +494,66 @@ internal static class DianaTrialCommands
             text += $"\n正式模块未能自动装回（{restored.Message}）；请手工执行 vulcan.module.reload";
 
         return CommandResult.Ok(text);
+    }
+
+    internal static async Task<CommandResult> UnloadMatchingAsync(
+        IModuleContext host,
+        string? moduleName,
+        string? sourcePrefix,
+        CancellationToken cancellation)
+    {
+        string? prefix = null;
+        if (!string.IsNullOrWhiteSpace(sourcePrefix))
+        {
+            try
+            {
+                prefix = Path.GetFullPath(sourcePrefix.Trim()).TrimEnd('\\', '/')
+                         + Path.DirectorySeparatorChar;
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                prefix = null;
+            }
+        }
+
+        var keys = Trials
+            .Where(pair =>
+            {
+                if (!string.IsNullOrWhiteSpace(moduleName)
+                    && (pair.Key.Equals(moduleName, StringComparison.OrdinalIgnoreCase)
+                        || pair.Value.ModuleName.Equals(moduleName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                if (prefix == null)
+                    return false;
+                try
+                {
+                    var source = Path.GetFullPath(pair.Value.SourcePath);
+                    return source.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                           || source.Equals(prefix.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+                }
+                catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+                {
+                    return false;
+                }
+            })
+            .Select(pair => pair.Key)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (keys.Count == 0)
+            return CommandResult.Ok("没有需要卸载的试用模块。");
+
+        var parts = new List<string>();
+        foreach (var key in keys)
+        {
+            var result = await UnloadAsync(host, key, cancellation).ConfigureAwait(false);
+            parts.Add(result.Message);
+        }
+
+        return CommandResult.Ok(string.Join('\n', parts));
     }
 
     /// <summary>
