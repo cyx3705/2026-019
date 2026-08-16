@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using HistoryVulcan.Core.Commands;
+using HistoryVulcan.Core.Storage;
 
 namespace HistoryDiana;
 
@@ -16,9 +17,10 @@ internal static class DianaRelayCommands
 {
     private const int MaximumArgumentsBytes = 64 * 1024;
 
-    public static void Register(CommandRegistry registry)
+    public static void Register(CommandRegistry registry, ISettingsService settings)
     {
         ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(settings);
 
         registry.Register(new CommandDescriptor
         {
@@ -26,7 +28,7 @@ internal static class DianaRelayCommands
             Domain = "HistoryDiana",
             CommandClass = "relay",
             Summary = "实时列出当前 MCP 策略下可见的工具",
-            Example = "diana.relay.list filter=project modulesonly=true",
+            Example = "diana.relay.list filter=diana modulesonly=true",
             Readonly = true,
             Parameters =
             [
@@ -38,7 +40,7 @@ internal static class DianaRelayCommands
                 var filter = (context.GetString("filter") ?? "").Trim();
                 var modulesOnly = context.GetBool("modulesonly", true);
 
-                using var client = OhsmcpClient.FromSettings();
+                using var client = OhsmcpClient.FromSettings(settings);
                 var tools = await client.ListToolsAsync().ConfigureAwait(false);
                 if (modulesOnly)
                 {
@@ -54,8 +56,13 @@ internal static class DianaRelayCommands
                         .ToList();
                 }
 
-                var ordered = tools.OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase).ToList();
-                return CommandResult.Ok($"可见工具 {ordered.Count} 个", new { Count = ordered.Count, Tools = ordered });
+                var ordered = tools.OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(tool => new { tool.Name, tool.Description })
+                    .ToList();
+                var text = new StringBuilder($"可见工具 {ordered.Count} 个");
+                foreach (var tool in ordered)
+                    text.Append($"\n  {tool.Name}");
+                return CommandResult.Ok(text.ToString(), new { Count = ordered.Count, Tools = ordered });
             },
         });
 
@@ -65,13 +72,13 @@ internal static class DianaRelayCommands
             Domain = "HistoryDiana",
             CommandClass = "relay",
             Summary = "查看一个当前可见 MCP 工具的描述与 JSON Schema",
-            Example = "diana.relay.describe name=ProjectPulse_Summary",
+            Example = "diana.relay.describe name=vulcan_command_list",
             Readonly = true,
             Parameters = [Text("name", "MCP 工具名", required: true, position: 0)],
             Handler = async context =>
             {
                 var name = RequireToolName(context.RequireString("name"));
-                using var client = OhsmcpClient.FromSettings();
+                using var client = OhsmcpClient.FromSettings(settings);
                 var tools = await client.ListToolsAsync().ConfigureAwait(false);
                 var tool = tools.FirstOrDefault(item =>
                     item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -87,7 +94,7 @@ internal static class DianaRelayCommands
             Domain = "HistoryDiana",
             CommandClass = "relay",
             Summary = "按当前 MCP 工具目录调用一个工具，不依赖会话里的旧快照",
-            Example = "diana.relay.call name=ProjectPulse_Summary argumentsjson={\"name\":\"2026-019-HistoryDiana\"}",
+            Example = "diana.relay.call name=diana_worktree_list argumentsjson={\"project\":\"2026-023-HistoryVulcan\"}",
             Parameters =
             [
                 Text("name", "MCP 工具名", required: true, position: 0),
@@ -97,7 +104,8 @@ internal static class DianaRelayCommands
             {
                 var name = RequireToolName(context.RequireString("name"));
                 // 自调用会形成中继环，直接拒绝。
-                if (name.StartsWith("DianaRelay_", StringComparison.OrdinalIgnoreCase)
+                if (name.StartsWith("diana_relay_", StringComparison.OrdinalIgnoreCase)
+                    || name.StartsWith("DianaRelay_", StringComparison.OrdinalIgnoreCase)
                     || name.StartsWith("ToolRelay_", StringComparison.OrdinalIgnoreCase))
                 {
                     return CommandResult.Fail("禁止中继自调用");
@@ -118,7 +126,7 @@ internal static class DianaRelayCommands
                     return CommandResult.Fail($"argumentsjson 不是有效 JSON: {ex.Message}");
                 }
 
-                using var client = OhsmcpClient.FromSettings();
+                using var client = OhsmcpClient.FromSettings(settings);
                 var tools = await client.ListToolsAsync().ConfigureAwait(false);
                 var target = tools.FirstOrDefault(tool =>
                     tool.Name.Equals(name, StringComparison.OrdinalIgnoreCase));

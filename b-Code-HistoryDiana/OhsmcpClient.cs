@@ -5,12 +5,12 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using HistoryVulcan.Core.Storage;
 
 namespace HistoryDiana;
 
 internal sealed class OhsmcpClient : IDisposable
 {
-    private const int DefaultPort = 8737;
     private const int DefaultTimeoutSeconds = 120;
     private const int MaximumResponseBytes = 4 * 1024 * 1024;
 
@@ -25,36 +25,17 @@ internal sealed class OhsmcpClient : IDisposable
         _endpoint = endpoint;
     }
 
-    public static OhsmcpClient FromSettings()
+    public static OhsmcpClient FromSettings(ISettingsService settings)
     {
-        var settingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "OneHistoryStudio",
-            "settings.json");
-        if (!File.Exists(settingsPath))
-            throw new InvalidOperationException("找不到 OneHistoryStudio 配置文件");
-
-        string? token;
-        int port;
-        int timeoutSeconds;
-        try
+        ArgumentNullException.ThrowIfNull(settings);
+        if (!int.TryParse(settings.Get("mcp.port"), out var port) || port is < 1024 or > 65535)
         {
-            using var settings = JsonDocument.Parse(File.ReadAllText(settingsPath));
-            var root = settings.RootElement;
-            port = ReadInt(root, "mcp.port", DefaultPort);
-            timeoutSeconds = ReadInt(root, "mcp.timeout", DefaultTimeoutSeconds);
-            token = root.TryGetProperty("mcp.token", out var tokenElement)
-                ? tokenElement.GetString()
-                : null;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            throw new InvalidOperationException($"读取 OneHistoryStudio 配置失败: {ex.Message}");
+            throw new InvalidOperationException(
+                "宿主 mcp.port 未设置或无效。relay 只连当前 HistoryVulcan，不再读 OneHistoryStudio。");
         }
 
-        if (port is < 1024 or > 65535)
-            throw new InvalidOperationException("OneHistoryStudio MCP 端口配置无效");
-        timeoutSeconds = Math.Clamp(timeoutSeconds, 5, 3600);
+        var timeoutSeconds = Math.Clamp(settings.GetInt("mcp.timeout", DefaultTimeoutSeconds), 5, 3600);
+        var token = settings.Get("mcp.token");
 
         var http = new HttpClient
         {
@@ -72,7 +53,7 @@ internal sealed class OhsmcpClient : IDisposable
         if (!result.TryGetProperty("tools", out var toolsElement)
             || toolsElement.ValueKind != JsonValueKind.Array)
         {
-            throw new InvalidOperationException("OHS MCP tools/list 返回格式无效");
+            throw new InvalidOperationException("MCP tools/list 返回格式无效");
         }
 
         var tools = new List<RelayTool>();
@@ -99,14 +80,14 @@ internal sealed class OhsmcpClient : IDisposable
     public async Task<IReadOnlySet<string>> ListVisibleModuleToolNamesAsync()
     {
         var arguments = new JsonObject { ["mcp"] = "visible" };
-        var result = await CallToolCoreAsync("command_list", arguments).ConfigureAwait(false);
+        var result = await CallToolCoreAsync("vulcan_command_list", arguments).ConfigureAwait(false);
         if (result.TryGetProperty("isError", out var errorElement)
             && errorElement.ValueKind == JsonValueKind.True)
         {
-            throw new InvalidOperationException("OHS 命令目录拒绝模块来源查询");
+            throw new InvalidOperationException("vulcan.command.list 拒绝模块来源查询");
         }
 
-        // V1.0.1:优先读规范字段 structuredContent.data(OHS V2.4.5 起提供)
+        // 优先读 structuredContent.data；content 文本块作回退。
         if (result.TryGetProperty("structuredContent", out var structuredElement)
             && structuredElement.ValueKind == JsonValueKind.Object
             && structuredElement.TryGetProperty("data", out var dataElement)
@@ -119,7 +100,7 @@ internal sealed class OhsmcpClient : IDisposable
         if (!result.TryGetProperty("content", out var contentElement)
             || contentElement.ValueKind != JsonValueKind.Array)
         {
-            throw new InvalidOperationException("OHS 命令目录返回格式无效");
+            throw new InvalidOperationException("vulcan.command.list 返回格式无效");
         }
 
         foreach (var content in contentElement.EnumerateArray())
@@ -142,7 +123,7 @@ internal sealed class OhsmcpClient : IDisposable
             }
         }
 
-        throw new InvalidOperationException("OHS 命令目录未返回可解析的模块清单");
+        throw new InvalidOperationException("vulcan.command.list 未返回可解析的模块清单");
     }
 
     /// <summary>
@@ -217,21 +198,21 @@ internal sealed class OhsmcpClient : IDisposable
         }
         catch (TaskCanceledException)
         {
-            throw new InvalidOperationException("OHS MCP 请求超时，目标可能仍在宿主内执行；不会自动重试");
+            throw new InvalidOperationException("MCP 请求超时，目标可能仍在宿主内执行；不会自动重试");
         }
         catch (HttpRequestException)
         {
-            throw new InvalidOperationException("无法连接 OHS MCP 回环服务");
+            throw new InvalidOperationException("无法连接当前 HistoryVulcan MCP 回环服务");
         }
 
         using (response)
         {
             if (response.StatusCode == HttpStatusCode.Unauthorized)
-                throw new InvalidOperationException("OHS MCP 认证失败");
+                throw new InvalidOperationException("MCP 认证失败");
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"OHS MCP 返回 HTTP {(int)response.StatusCode}");
+                throw new InvalidOperationException($"MCP 返回 HTTP {(int)response.StatusCode}");
             if (response.Content.Headers.ContentLength is > MaximumResponseBytes)
-                throw new InvalidOperationException("OHS MCP 响应超过 4 MiB 上限");
+                throw new InvalidOperationException("MCP 响应超过 4 MiB 上限");
 
             string json;
             try
@@ -240,11 +221,11 @@ internal sealed class OhsmcpClient : IDisposable
             }
             catch (Exception ex) when (ex is IOException or HttpRequestException)
             {
-                throw new InvalidOperationException("读取 OHS MCP 响应失败");
+                throw new InvalidOperationException("读取 MCP 响应失败");
             }
 
             if (Encoding.UTF8.GetByteCount(json) > MaximumResponseBytes)
-                throw new InvalidOperationException("OHS MCP 响应超过 4 MiB 上限");
+                throw new InvalidOperationException("MCP 响应超过 4 MiB 上限");
 
             try
             {
@@ -255,25 +236,19 @@ internal sealed class OhsmcpClient : IDisposable
                     var message = rpcError.TryGetProperty("message", out var messageElement)
                         ? messageElement.GetString() ?? "未知错误"
                         : "未知错误";
-                    throw new InvalidOperationException($"OHS MCP 拒绝请求: {message}");
+                    throw new InvalidOperationException($"MCP 拒绝请求: {message}");
                 }
 
                 if (!root.TryGetProperty("result", out var result))
-                    throw new InvalidOperationException("OHS MCP JSON-RPC 响应缺少 result");
+                    throw new InvalidOperationException("MCP JSON-RPC 响应缺少 result");
                 return result.Clone();
             }
             catch (JsonException)
             {
-                throw new InvalidOperationException("OHS MCP 返回了无效 JSON");
+                throw new InvalidOperationException("MCP 返回了无效 JSON");
             }
         }
     }
-
-    private static int ReadInt(JsonElement root, string key, int fallback)
-        => root.TryGetProperty(key, out var element)
-           && int.TryParse(element.GetString(), out var value)
-            ? value
-            : fallback;
 
     private static JsonElement EmptyObject()
     {

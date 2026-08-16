@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Text;
 using BaseVariable;
 using HistoryDiana;
 using HistoryVulcan.Core.Commands;
@@ -21,13 +22,21 @@ try
     var channelPackage = Path.Combine(channelProject, "z-HistoryJanus");
     Directory.CreateDirectory(Path.Combine(channelPackage, "docs"));
     var apiPath = Path.Combine(channelPackage, "docs", "模块API.md");
-    File.WriteAllText(apiPath, "# Janus API\nsmoke");
+    File.WriteAllText(apiPath, "# Janus API\nintro\n## 命令\ncommand-body\n## 窗口\nwindow-body\n");
+    var changelogPath = Path.Combine(channelPackage, "docs", "变更摘要.md");
+    var changelog = new StringBuilder();
+    changelog.Append("# 变更\n## 主要变化\n- 9.9.9 first-item\n  continued-line\n- 9.9.8 other-item\n## 附录\n");
+    while (Encoding.UTF8.GetByteCount(changelog.ToString()) <= 12 * 1024)
+        changelog.Append("padding-line-to-force-outline\n");
+    File.WriteAllText(changelogPath, changelog.ToString());
     File.WriteAllText(Path.Combine(channelPackage, "module.manifest.json"),
         """
         {"schemaVersion":1,"type":"HistoryVulcan.Module","name":"HistoryJanus","version":"9.9.9","artifact":"HistoryJanus.dll","ui":false}
         """);
     var apiHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(apiPath)));
-    File.WriteAllText(Path.Combine(channelPackage, "SHA256SUMS"), $"{apiHash}  docs/模块API.md{Environment.NewLine}");
+    var changelogHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(changelogPath)));
+    File.WriteAllText(Path.Combine(channelPackage, "SHA256SUMS"),
+        $"{apiHash}  docs/模块API.md{Environment.NewLine}{changelogHash}  docs/变更摘要.md{Environment.NewLine}");
 
     var registry = new CommandRegistry();
     var log = new TestLog();
@@ -48,7 +57,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.10.9", moduleInfos[0].Version, "模块版本");
+    Equal("1.10.10", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
@@ -68,6 +77,11 @@ try
     }
     True(names.All(name => name.StartsWith("diana.", StringComparison.Ordinal)),
         "不得保留 StudioTools 或 ProjectPulse 命令前缀");
+    True(
+        descriptors.All(descriptor =>
+            descriptor.Example is null
+            || !descriptor.Example.Contains("ProjectPulse", StringComparison.Ordinal)),
+        "示例不得再引用已退役的 ProjectPulse");
     True(descriptors.All(descriptor => descriptor.Domain == "HistoryDiana"), "命令域必须归属 HistoryDiana");
     SequenceEqual(
         new[] { "docs", "kit", "project", "relay", "release", "trial", "worktree" },
@@ -125,11 +139,42 @@ try
     True(catalog.Success, "docs catalog 必须成功");
     True(catalog.Message.Contains("diana.docs.janus", StringComparison.Ordinal),
         "索引必须把通道命令显式写进对话文本");
+    True(catalog.Message.Contains("heading=", StringComparison.Ordinal),
+        "索引必须提示长文用 heading= 按节读取");
     var listed = await bus.ExecuteAsync("diana.docs.janus", "smoke");
     True(listed.Success && listed.Message.Contains("docs/模块API.md", StringComparison.Ordinal),
         "通道省略 file 时只列出本通道文档");
     var opened = await bus.ExecuteAsync("diana.docs.janus file=docs/模块API.md", "smoke");
-    True(opened.Success, "通道按 file 读取 z 内 Markdown");
+    True(opened.Success && opened.Message.Contains("intro", StringComparison.Ordinal),
+        "通道按 file 读取 z 内 Markdown");
+    var shortName = await bus.ExecuteAsync("diana.docs.janus file=模块API.md", "smoke");
+    True(shortName.Success && shortName.Message.Contains("intro", StringComparison.Ordinal),
+        "唯一文件名应解析到 catalog 路径");
+    var section = await bus.ExecuteAsync("diana.docs.janus file=docs/模块API.md heading=命令", "smoke");
+    True(section.Success && section.Message.Contains("command-body", StringComparison.Ordinal),
+        "heading 只返回指定一节");
+    True(!section.Message.Contains("window-body", StringComparison.Ordinal),
+        "heading 不得带回后续章节");
+    var outline = await bus.ExecuteAsync("diana.docs.janus file=docs/变更摘要.md", "smoke");
+    True(outline.Success && outline.Message.Contains("章节:", StringComparison.Ordinal),
+        "超过 12 KiB 未带 heading 只返回目录");
+    True(outline.Message.Contains("版本:", StringComparison.Ordinal) &&
+        outline.Message.Contains("9.9.9", StringComparison.Ordinal),
+        "长文目录必须列出版本号");
+    True(!outline.Message.Contains("first-item", StringComparison.Ordinal),
+        "目录不得带回版本正文");
+    var versionSlice = await bus.ExecuteAsync(
+        "diana.docs.janus file=docs/变更摘要.md heading=9.9.9", "smoke");
+    True(versionSlice.Success && versionSlice.Message.Contains("first-item", StringComparison.Ordinal),
+        "heading=版本号应切出该版本条目");
+    True(versionSlice.Message.Contains("continued-line", StringComparison.Ordinal),
+        "版本条目应包含续行");
+    True(!versionSlice.Message.Contains("other-item", StringComparison.Ordinal),
+        "heading=版本号不得带回其他版本");
+    var missingHeading = await bus.ExecuteAsync(
+        "diana.docs.janus file=docs/变更摘要.md heading=不存在", "smoke");
+    True(!missingHeading.Success && missingHeading.Message.Contains("9.9.9", StringComparison.Ordinal),
+        "找不到标题时应列出可用版本");
     var escaped = await bus.ExecuteAsync("diana.docs.janus file=../secret.md", "smoke");
     True(!escaped.Success, "通道必须拒绝越出 z 的路径");
 

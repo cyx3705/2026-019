@@ -37,7 +37,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         // 工具箱的另外两类：kit（哈希/编码/标识/时间）与 relay（MCP 工具中继）。
         // 按类分文件，但注册入口只有这一处。docs 通道按现场 z-* 扫描登记。
         DianaKitCommands.Register(registry);
-        DianaRelayCommands.Register(registry);
+        DianaRelayCommands.Register(registry, settings);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
         DianaZDocCommands.Register(registry, settings);
         // 候选模块试用：只进内存、不做发现、只供调用，见 DianaTrialCommands 的类型注释。

@@ -133,6 +133,95 @@ function Test-VulcanFormalProcessRunning {
     return @(Get-VulcanFormalProcesses).Count -gt 0
 }
 
+function Get-PublicApiBaselineEntries {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [switch]$SkipNullableEnable
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    return @(
+        [IO.File]::ReadAllLines($Path, [Text.UTF8Encoding]::new($false)) |
+            ForEach-Object { $_.Trim().TrimStart([char]0xFEFF) } |
+            Where-Object {
+                ($_ -ne '') -and (-not $SkipNullableEnable -or $_ -ne '#nullable enable')
+            }
+    )
+}
+
+function Ensure-HostPublicApiBaseline {
+    param([Parameter(Mandatory = $true)][string]$ProjectRoot)
+
+    $componentRoot = Join-Path $ProjectRoot 'b-Code-HistoryVulcan'
+    $baselineRoot = Join-Path $componentRoot 'eng\public-api-baselines'
+    $versionProps = Join-Path $componentRoot 'VulcanVersion.props'
+    if (-not (Test-Path -LiteralPath $versionProps -PathType Leaf)) {
+        throw "VulcanVersion.props is missing: $versionProps"
+    }
+
+    $versionMatch = [regex]::Match(
+        [IO.File]::ReadAllText($versionProps),
+        '<VulcanVersion>(?<version>[^<]+)</VulcanVersion>')
+    if (-not $versionMatch.Success) {
+        throw 'VulcanVersion.props does not contain VulcanVersion'
+    }
+
+    $version = $versionMatch.Groups['version'].Value.Trim()
+    $currentDir = Join-Path $baselineRoot $version
+    if (Test-Path -LiteralPath $currentDir -PathType Container) {
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $baselineRoot -PathType Container)) {
+        throw "Public API baseline root is missing: $baselineRoot"
+    }
+
+    $previous = @(
+        Get-ChildItem -LiteralPath $baselineRoot -Directory |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } |
+            Where-Object { [version]$_.Name -lt [version]$version } |
+            Sort-Object { [version]$_.Name }
+    ) | Select-Object -Last 1
+    if ($null -eq $previous) {
+        throw "Missing approved Unshipped baseline directory for $version, and no previous version exists to inherit: $currentDir"
+    }
+
+    $projects = @(
+        'HistoryVulcan.Core'
+        'HistoryVulcan.Services'
+        'HistoryVulcan.ServiceHost'
+        'HistoryVulcan.Shell'
+    )
+    $changed = @()
+    foreach ($project in $projects) {
+        $current = Get-PublicApiBaselineEntries -Path (Join-Path $componentRoot "src\$project\PublicAPI.Unshipped.txt") -SkipNullableEnable
+        $approved = Get-PublicApiBaselineEntries -Path (Join-Path $previous.FullName "$project.Unshipped.txt")
+        if ($null -eq $current -or $null -eq $approved) {
+            $changed += $project
+            continue
+        }
+
+        $difference = @(Compare-Object -ReferenceObject @($approved) -DifferenceObject @($current))
+        if ($difference.Count -ne 0) {
+            $changed += $project
+        }
+    }
+
+    if ($changed.Count -gt 0) {
+        throw @"
+Public API Unshipped differs from $($previous.Name) ($($changed -join ', ')). Do not auto-approve a new contract.
+After review, copy the previous baseline then replace Unshipped files with the intended contract:
+  Copy-Item -LiteralPath '$($previous.FullName)' -Destination '$currentDir' -Recurse
+"@
+    }
+
+    Copy-Item -LiteralPath $previous.FullName -Destination $currentDir -Recurse
+    Write-Host "Public API unchanged; inherited baseline $($previous.Name) -> $version"
+}
+
 function Stop-VulcanFormalProcesses {
     $hostExecutable = Get-VulcanFormalExecutable
     if ([string]::IsNullOrWhiteSpace($hostExecutable)) {
@@ -561,6 +650,7 @@ try {
             'test', (Join-Path $projectRoot $definition.TestProject), '-c', 'Release', '--nologo',
             '--no-restore', '-p:NuGetAudit=false'
         ) $projectRoot 'Run host unit tests'
+        Ensure-HostPublicApiBaseline -ProjectRoot $projectRoot
         foreach ($gate in @($definition.GateScripts)) {
             Invoke-Checked 'powershell.exe' @(
                 '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $projectRoot $gate)
