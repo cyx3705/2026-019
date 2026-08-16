@@ -272,10 +272,17 @@ internal static class DianaWorktreeCommands
         if (string.IsNullOrWhiteSpace(branch) || branch == "HEAD")
             return CommandResult.Fail("无法读取工作区分支名。");
 
-        string? moduleName = DianaReleaseCommands.TryResolveModuleByProject(
-            host.Settings, projectName, out var module)
-            ? module.Name
-            : null;
+        var resolved = DianaReleaseCommands.TryResolveModuleByProject(
+            host.Settings, projectName, out var module);
+        string? moduleName = resolved ? module.Name : null;
+        if (resolved && module.Kind.Equals("host", StringComparison.OrdinalIgnoreCase)
+            && IsFormalHostRunning(host.Settings, out var hostExe))
+        {
+            return CommandResult.Fail(
+                $"正式宿主正在运行，合并会替换 {hostExe}。"
+                + "Diana 住在该进程里，不能自己停自己。先停止正式 HistoryVulcan.exe，再 diana.worktree.merge，合并后启动新 EXE（后台加 --service）。");
+        }
+
         var released = await DianaTrialCommands.ReleaseForWorktreeAsync(
             host, moduleName, worktreePath, cancellation).ConfigureAwait(false);
 
@@ -299,11 +306,19 @@ internal static class DianaWorktreeCommands
 
         var removed = Remove(host.Settings, projectName, worktreeName, force: true, skipUnmergedGate: true);
 
-        var reload = await host.Bus.ExecuteAsync("vulcan.module.reload", "diana.worktree.merge")
-            .ConfigureAwait(false);
-        var reloadNote = reload.Success
-            ? "已 vulcan.module.reload 装入合并后的正式 z"
-            : $"合并后热重载未成功（{reload.Message}），请手工 vulcan.module.reload";
+        string reloadNote;
+        if (resolved && module.Kind.Equals("host", StringComparison.OrdinalIgnoreCase))
+        {
+            reloadNote = "宿主 EXE 不随 vulcan.module.reload 替换；新快照在下次启动正式 HistoryVulcan.exe 时生效。";
+        }
+        else
+        {
+            var reload = await host.Bus.ExecuteAsync("vulcan.module.reload", "diana.worktree.merge")
+                .ConfigureAwait(false);
+            reloadNote = reload.Success
+                ? "已 vulcan.module.reload 装入合并后的正式 z"
+                : $"合并后热重载未成功（{reload.Message}），请手工 vulcan.module.reload";
+        }
 
         var text = new StringBuilder($"{mergeNote}。\n{released.Message}\n{removed.Message}\n{reloadNote}");
         if (!removed.Success)
@@ -508,6 +523,41 @@ internal static class DianaWorktreeCommands
         }
 
         return $"残留目录未能删除：{path}（{lastError}）";
+    }
+
+    private static bool IsFormalHostRunning(ISettingsService settings, out string executable)
+    {
+        executable = Path.Combine(
+            DianaLibraryRoot.Resolve(settings),
+            "2026-023-HistoryVulcan",
+            "z-HistoryVulcan",
+            "host",
+            "HistoryVulcan.exe");
+        if (!File.Exists(executable))
+            return false;
+
+        var expected = Path.GetFullPath(executable);
+        foreach (var process in Process.GetProcessesByName("HistoryVulcan"))
+        {
+            try
+            {
+                var path = process.MainModule?.FileName;
+                if (!string.IsNullOrWhiteSpace(path)
+                    && string.Equals(Path.GetFullPath(path), expected, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        return false;
     }
 
     private static string ResolveRoot(ISettingsService settings, string? rootOverride)

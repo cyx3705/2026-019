@@ -32,6 +32,9 @@ namespace HistoryDiana;
 /// <c>ui=true</c> 时若正式模块已装载，会先执行宿主 3.11.5 的 <c>vulcan.module.unload</c>
 /// 卸掉同名正式模块（释放工具窗口 Id），试用结束再 <c>vulcan.module.reload</c> 装回。
 /// 不得对 HistoryDiana 自己做这件事，否则本命令会把自己卸掉。
+/// Diana 热重载会丢掉静态试用表但可回收 ALC 仍可能锁着 DLL：宿主登记命令时、unload 和 merge
+/// 都会清扫残留的 <c>diana.trial:*</c> 以及仍映射磁盘文件的可回收上下文，不需要关宿主。
+/// 试用程序集从内存流装载。正在试用装载中的 HistoryDiana 副本不得清扫自己。
 ///
 /// 另需注意：<c>Attach</c> 是候选模块自己的代码，它可能启动监视器、全局快捷键一类的进程级副作用，
 /// 这些副作用会和正式模块并存直到 <c>diana.trial.unload</c>。
@@ -110,6 +113,13 @@ internal static class DianaTrialCommands
             Handler = async context => await UnloadAsync(
                 host, context.GetString("alias"), context.Cancellation).ConfigureAwait(false),
         });
+
+        // 宿主 Diana 热重载会丢掉静态试用表，但 diana.trial:* 可回收 ALC 仍在进程里锁 DLL。
+        // 夹具会把 HistoryDiana.dll 再装进试用 ALC；那份副本的静态表是空的，若在这里清扫
+        // 会把正在 Attach 的自己卸掉。只让非试用上下文里的宿主副本清扫。
+        var selfName = AssemblyLoadContext.GetLoadContext(typeof(DianaTrialCommands).Assembly)?.Name ?? "";
+        if (!selfName.StartsWith("diana.trial:", StringComparison.Ordinal))
+            SweepOrphanTrialContexts();
     }
 
     internal static Task<CommandResult> LoadFromPathAsync(
@@ -162,6 +172,12 @@ internal static class DianaTrialCommands
         if (moduleName.Length == 0)
             return CommandResult.Fail("清单没有声明 name。");
 
+        if (moduleName.Equals("HistoryVulcan", StringComparison.OrdinalIgnoreCase))
+        {
+            return CommandResult.Fail(
+                "HistoryVulcan 是宿主，不是模块。不能 diana.trial.load。开工作区后用 diana.release.cycle name=HistoryVulcan。");
+        }
+
         var assemblyPath = Path.Combine(root, moduleName + ".dll");
         if (!File.Exists(assemblyPath))
             return CommandResult.Fail($"快照缺少程序集：{assemblyPath}");
@@ -192,7 +208,7 @@ internal static class DianaTrialCommands
         var loadContext = new TrialLoadContext(key, assemblyPath);
         try
         {
-            var assembly = loadContext.LoadFromAssemblyPath(assemblyPath);
+            var assembly = loadContext.LoadModule(assemblyPath);
             var trialRegistry = new CommandRegistry();
             var trialContext = new TrialModuleContext(host, trialRegistry);
 
@@ -465,7 +481,18 @@ internal static class DianaTrialCommands
             : [alias.Trim()];
 
         if (targets.Count == 0)
-            return CommandResult.Ok("当前没有试用中的候选模块。");
+        {
+            var orphans = SweepOrphanTrialContexts();
+            if (orphans > 0)
+            {
+                return CommandResult.Ok($"当前没有登记中的试用；已回收 {orphans} 个残留装载上下文。");
+            }
+
+            var leftover = DescribeCollectibleContexts();
+            return CommandResult.Ok(string.IsNullOrEmpty(leftover)
+                ? "当前没有试用中的候选模块。"
+                : $"当前没有登记中的试用。仍有可回收装载上下文：{leftover}");
+        }
 
         var unloaded = new List<string>();
         var uiFailures = new List<string>();
@@ -496,8 +523,13 @@ internal static class DianaTrialCommands
             unloaded.Add($"{trial.Alias}({trial.ModuleName} {trial.Version})");
         }
 
+        var swept = SweepOrphanTrialContexts();
         if (unloaded.Count == 0)
-            return CommandResult.Fail($"没有别名为 {alias} 的试用模块。");
+        {
+            return swept == 0
+                ? CommandResult.Fail($"没有别名为 {alias} 的试用模块。")
+                : CommandResult.Ok($"没有登记中的试用别名 {alias}；已回收 {swept} 个残留装载上下文。");
+        }
 
         var restored = await RestoreFormalModulesIfIdleAsync(host, displacedAny, cancellation)
             .ConfigureAwait(false);
@@ -609,14 +641,87 @@ internal static class DianaTrialCommands
         }
 
         CollectTrialAssemblies();
+        SweepOrphanTrialContexts();
         return CommandResult.Ok(string.Join('\n', parts));
     }
 
+    internal static int SweepOrphanTrialContexts()
+    {
+        var live = Trials.Values.Select(trial => (AssemblyLoadContext)trial.LoadContext)
+            .ToHashSet();
+        var self = AssemblyLoadContext.GetLoadContext(typeof(DianaTrialCommands).Assembly);
+        if (self != null)
+            live.Add(self);
+
+        var swept = 0;
+        foreach (var context in AssemblyLoadContext.All.ToArray())
+        {
+            if (!context.IsCollectible || live.Contains(context))
+                continue;
+
+            var trialNamed = context.Name is { Length: > 0 } name
+                             && name.StartsWith("diana.trial:", StringComparison.Ordinal);
+            if (!trialNamed && !HoldsFileBackedAssemblies(context))
+                continue;
+
+            try
+            {
+                context.Unload();
+                swept++;
+            }
+            catch (InvalidOperationException)
+            {
+                // 已在卸载中。
+            }
+        }
+
+        CollectTrialAssemblies();
+        return swept;
+    }
+
+    internal static bool DropWithoutUnloadForTests(string alias)
+        => Trials.TryRemove(alias, out _);
+
+    internal static bool HasTrialLoadContext(string alias)
+        => AssemblyLoadContext.All.Any(context =>
+            string.Equals(context.Name, "diana.trial:" + alias, StringComparison.Ordinal));
+
     internal static void CollectTrialAssemblies()
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        for (var round = 0; round < 3; round++)
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
+    }
+
+    private static bool HoldsFileBackedAssemblies(AssemblyLoadContext context)
+    {
+        try
+        {
+            return context.Assemblies.Any(assembly => assembly.Location is { Length: > 0 });
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static string DescribeCollectibleContexts()
+    {
+        try
+        {
+            var names = AssemblyLoadContext.All
+                .Where(context => context.IsCollectible)
+                .Select(context => context.Name ?? "(unnamed)")
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
+            return names.Count == 0 ? "" : string.Join("、", names);
+        }
+        catch (InvalidOperationException)
+        {
+            return "";
+        }
     }
 
     /// <summary>
@@ -812,12 +917,14 @@ internal static class DianaTrialCommands
     /// <remarks>
     /// 宿主契约程序集必须落回默认上下文：候选模块实现的 <see cref="IModuleContextAware"/>
     /// 必须和 Diana 看到的是同一个类型，否则装载后接口判定恒为 false，试用面永远是空的。
-    /// 只有候选自带的私有依赖才从快照目录加载。
+    /// 只有候选自带的私有依赖才从快照目录加载。和宿主一样从内存流装载，避免锁住工作区 DLL。
     /// </remarks>
     private sealed class TrialLoadContext(string alias, string assemblyPath)
         : AssemblyLoadContext($"diana.trial:{alias}", isCollectible: true)
     {
         private readonly AssemblyDependencyResolver _resolver = new(assemblyPath);
+
+        internal Assembly LoadModule(string path) => LoadFromMemory(path);
 
         protected override Assembly? Load(AssemblyName assemblyName)
         {
@@ -829,7 +936,13 @@ internal static class DianaTrialCommands
             }
 
             var path = _resolver.ResolveAssemblyToPath(assemblyName);
-            return path == null ? null : LoadFromAssemblyPath(path);
+            return path == null ? null : LoadFromMemory(path);
+        }
+
+        private Assembly LoadFromMemory(string path)
+        {
+            var bytes = File.ReadAllBytes(path);
+            return LoadFromStream(new MemoryStream(bytes));
         }
     }
 

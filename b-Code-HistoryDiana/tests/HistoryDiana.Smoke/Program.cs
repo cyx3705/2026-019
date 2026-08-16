@@ -48,7 +48,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.10.6", moduleInfos[0].Version, "模块版本");
+    Equal("1.10.9", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
@@ -171,6 +171,17 @@ try
         {"schemaVersion":1,"type":"HistoryVulcan.Module","name":"HistoryJanus","version":"9.9.9","artifact":"HistoryJanus.dll","ui":true}
         """);
 
+    var hostSnap = Path.Combine(temporaryRoot, "candidate", "z-HistoryVulcan");
+    Directory.CreateDirectory(hostSnap);
+    File.WriteAllText(Path.Combine(hostSnap, "module.manifest.json"),
+        """
+        {"schemaVersion":1,"type":"HistoryVulcan.Host","name":"HistoryVulcan","version":"9.9.9"}
+        """);
+    var hostTrial = await DianaTrialCommands.LoadFromPathAsync(
+        context, hostSnap, "smoke-host", createUi: false, CancellationToken.None);
+    True(!hostTrial.Success, "宿主快照不得 trial.load");
+    True(hostTrial.Message.Contains("宿主", StringComparison.Ordinal), "失败必须说明这是宿主不是模块");
+
     var loadedFormal = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "HistoryJanus", "HistoryDiana" };
     var unloadCalls = new List<string>();
     var reloadCount = 0;
@@ -284,6 +295,23 @@ try
             call.StartsWith("vulcan.module.trialui.unload", StringComparison.Ordinal)
             && call.Contains("HistoryJanus", StringComparison.Ordinal)),
         "Trials 已空时仍须拆除前端试用界面，否则工作区 DLL 删不掉");
+
+    var leakLoaded = await DianaTrialCommands.LoadFromPathAsync(
+        context, janusRoot, "smoke-leak", createUi: false, CancellationToken.None);
+    True(leakLoaded.Success, "无界面试用应成功");
+    True(DianaTrialCommands.HasTrialLoadContext("smoke-leak"), "试用 ALC 应存在");
+    True(DianaTrialCommands.DropWithoutUnloadForTests("smoke-leak"), "模拟 Diana 热重载丢掉试用表");
+    True(DianaTrialCommands.HasTrialLoadContext("smoke-leak"), "丢掉表之后 ALC 仍应占着 DLL");
+    True(DianaTrialCommands.SweepOrphanTrialContexts() >= 1, "应回收残留试用 ALC");
+    var leakDll = Path.Combine(janusRoot, "HistoryJanus.dll");
+    try
+    {
+        using var released = File.Open(leakDll, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+    }
+    catch (IOException ex)
+    {
+        throw new InvalidOperationException($"清扫残留 ALC 后必须释放候选 DLL：{ex.Message}");
+    }
 
     var isolatedRegistry = new CommandRegistry();
     var isolatedLog = new TestLog();

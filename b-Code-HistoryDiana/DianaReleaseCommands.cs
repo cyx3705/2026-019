@@ -39,7 +39,7 @@ internal static class DianaReleaseCommands
             Name = "diana.release.modules",
             Domain = "HistoryDiana",
             CommandClass = "release",
-            Summary = "列出发布登记表里的模块及其项目目录",
+            Summary = "列出可发布的模块和宿主及其项目目录",
             Example = "diana.release.modules",
             Readonly = true,
             Handler = CommandDescriptor.Sync(_ => Modules(host.Settings)),
@@ -134,11 +134,13 @@ internal static class DianaReleaseCommands
             return CommandResult.Fail($"发布登记表解析失败：{ex.Message}");
         }
 
-        rows = rows.Where(row => row.Name.Length > 0).OrderBy(row => row.Name, StringComparer.Ordinal).ToList();
-        var text = new StringBuilder($"已登记模块: {rows.Count} 个");
+        rows = rows.Where(row => row.Name.Length > 0).ToList();
+        if (!rows.Any(row => row.Name.Equals("HistoryVulcan", StringComparison.OrdinalIgnoreCase)))
+            rows.Add(("HistoryVulcan", "host", "2026-023-HistoryVulcan"));
+        rows = rows.OrderBy(row => row.Name, StringComparer.Ordinal).ToList();
+        var text = new StringBuilder($"已登记发布目标: {rows.Count} 个");
         foreach (var row in rows)
             text.Append($"\n  {row.Name,-18} {row.Kind,-8} {row.Project}");
-        text.Append("\n宿主 HistoryVulcan 由管线内置特例配置，不在此表中。");
         return CommandResult.Ok(text.ToString(), rows.Select(row => new { row.Name, row.Kind, row.Project }).ToList());
     }
 
