@@ -210,22 +210,40 @@ internal static class DianaReleaseCommands
         Directory.CreateDirectory(logDirectory);
         var run = $"{DateTime.Now:yyyyMMdd-HHmmss}-{moduleName}";
         var logPath = Path.Combine(logDirectory, run + ".log");
+        // cycle 一返回 run 就会去读这份日志；子进程的重定向还没创建文件时，
+        // 旧逻辑会立刻报「找不到运行记录」。先占位，等管线往里追加。
+        File.WriteAllText(logPath, "", new UTF8Encoding(false));
 
         // 子进程自己写日志：Diana 被管线热重载时，泵送线程会断，日志就断在半截。
-        // 必须用嵌套的 powershell.exe -File 调起管线，不能在本会话里 `& 脚本`：
+        // 必须用嵌套的 powershell.exe 调起管线，不能在本会话里 `& 脚本`：
         // 管线内部会 exit，那会直接终结整个会话，后面的收尾语句一行都跑不到，
         // 实测表现为子进程已退出却没有留下退出码文件。
-        var command = new StringBuilder();
-        command.Append("& powershell.exe -NoProfile -ExecutionPolicy Bypass -File ");
-        command.Append($"{Quote(scriptPath)} -Module {Quote(moduleName)}");
+        // 日志用 UTF-8 流式追加，不用 `*>`：控制台默认 GBK，中文 dotnet 输出会烂码。
+        var inner = new StringBuilder();
+        inner.Append("chcp 65001 | Out-Null; ");
+        inner.Append("[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; ");
+        inner.Append($"& {Quote(scriptPath)} -Module {Quote(moduleName)}");
         if (publish)
-            command.Append(" -Publish");
+            inner.Append(" -Publish");
         if (projectRootOverride != null)
-            command.Append($" -SourceWorktree {Quote(projectRootOverride)}");
-        // 退出码单独落一个纯 ASCII 文件，不往日志里追加：`*>` 重定向用的是控制台编码，
-        // 再用 Out-File 追加会混进另一种编码，实测哨兵行被写成 UTF-16 而无法解析。
-        command.Append($" *> {Quote(logPath)}; ");
-        command.Append("$__pipe = $LASTEXITCODE; if ($null -eq $__pipe) { $__pipe = 1 }; ");
+            inner.Append($" -SourceWorktree {Quote(projectRootOverride)}");
+        inner.Append("; exit $LASTEXITCODE");
+
+        var command = new StringBuilder();
+        command.Append("chcp 65001 | Out-Null; ");
+        command.Append("[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; ");
+        command.Append("$OutputEncoding = [Console]::OutputEncoding; ");
+        command.Append("$__utf8 = New-Object System.Text.UTF8Encoding $false; ");
+        command.Append($"$__writer = New-Object System.IO.StreamWriter({Quote(logPath)}, $true, $__utf8); ");
+        command.Append("$__writer.AutoFlush = $true; ");
+        command.Append("$__pipe = 1; ");
+        command.Append("try { ");
+        command.Append("& powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ");
+        command.Append(Quote(inner.ToString()));
+        command.Append(" 2>&1 | ForEach-Object { $__writer.WriteLine([string]$_) }; ");
+        command.Append("$__pipe = $LASTEXITCODE; if ($null -eq $__pipe) { $__pipe = 1 } ");
+        command.Append("} finally { $__writer.Close() }; ");
+        // 退出码单独落一个纯 ASCII 文件，不往日志里追加。
         if (!string.IsNullOrWhiteSpace(commitRoot) && !string.IsNullOrWhiteSpace(commitMessage))
         {
             var msgPath = logPath + ".msg";
@@ -347,7 +365,7 @@ internal static class DianaReleaseCommands
         try
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(stream);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             while (reader.ReadLine() is { } line)
                 all.Add(line);
         }
@@ -460,6 +478,7 @@ internal static class DianaReleaseCommands
         if (!string.Equals(module.Kind, "module", StringComparison.OrdinalIgnoreCase))
         {
             text.Append("\n宿主候选不走 trial，可继续在工作区开发或 diana.worktree.merge。");
+            text.Append("\n合并前先把对话根迁出工作区。");
             return CommandResult.Ok(text.ToString(), new
             {
                 Module = moduleName,
@@ -478,6 +497,7 @@ internal static class DianaReleaseCommands
             host, snapshot, alias: null, createUi, cancellation).ConfigureAwait(false);
         text.Append('\n').Append(trial.Success ? trial.Message : "试用未成功（提交已保留，不回滚）：" + trial.Message);
         text.Append("\n可继续在此工作区开发，或 diana.worktree.merge 并回主线。");
+        text.Append("\n合并前先把对话根迁出工作区（迁到项目主树或 Diana），再 merge；合并会删工作区目录。");
         return trial.Success
             ? CommandResult.Ok(text.ToString(), new
             {
@@ -502,7 +522,16 @@ internal static class DianaReleaseCommands
             cancellation.ThrowIfCancellationRequested();
             var (logPath, error) = ResolveRun(host, run);
             if (error != null)
+            {
+                if (error.Contains("找不到运行记录", StringComparison.Ordinal)
+                    && DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(250, cancellation).ConfigureAwait(false);
+                    continue;
+                }
+
                 return (false, -1, error);
+            }
 
             var tail = ReadTail(logPath!, 40, out var exitCode, out var finished);
             if (finished)

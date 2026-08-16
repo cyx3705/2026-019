@@ -25,7 +25,7 @@ internal sealed class OhsmcpClient : IDisposable
         _endpoint = endpoint;
     }
 
-    public static OhsmcpClient FromSettings(ISettingsService settings)
+    public static OhsmcpClient FromSettings(ISettingsService settings, int? timeoutSeconds = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         if (!int.TryParse(settings.Get("mcp.port"), out var port) || port is < 1024 or > 65535)
@@ -34,12 +34,14 @@ internal sealed class OhsmcpClient : IDisposable
                 "宿主 mcp.port 未设置或无效。relay 只连当前 HistoryVulcan，不再读 OneHistoryStudio。");
         }
 
-        var timeoutSeconds = Math.Clamp(settings.GetInt("mcp.timeout", DefaultTimeoutSeconds), 5, 3600);
+        var timeout = timeoutSeconds is int explicitTimeout
+            ? Math.Clamp(explicitTimeout, 5, 3600)
+            : Math.Clamp(settings.GetInt("mcp.timeout", DefaultTimeoutSeconds), 5, 3600);
         var token = settings.Get("mcp.token");
 
         var http = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+            Timeout = TimeSpan.FromSeconds(timeout),
         };
         if (!string.IsNullOrEmpty(token))
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);

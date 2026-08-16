@@ -16,6 +16,7 @@ namespace HistoryDiana;
 internal static class DianaRelayCommands
 {
     private const int MaximumArgumentsBytes = 64 * 1024;
+    private const int CycleCallTimeoutSeconds = 21 * 60;
 
     public static void Register(CommandRegistry registry, ISettingsService settings)
     {
@@ -59,7 +60,9 @@ internal static class DianaRelayCommands
                 var ordered = tools.OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase)
                     .Select(tool => new { tool.Name, tool.Description })
                     .ToList();
-                var text = new StringBuilder($"可见工具 {ordered.Count} 个");
+                var text = new StringBuilder(
+                    "Cursor 会话里的工具表可能过期。以本列表为准；没有的工具用 diana.relay.call / describe。\n");
+                text.Append($"可见工具 {ordered.Count} 个");
                 foreach (var tool in ordered)
                     text.Append($"\n  {tool.Name}");
                 return CommandResult.Ok(text.ToString(), new { Count = ordered.Count, Tools = ordered });
@@ -126,7 +129,9 @@ internal static class DianaRelayCommands
                     return CommandResult.Fail($"argumentsjson 不是有效 JSON: {ex.Message}");
                 }
 
-                using var client = OhsmcpClient.FromSettings(settings);
+                using var client = name.Equals("diana_release_cycle", StringComparison.OrdinalIgnoreCase)
+                    ? OhsmcpClient.FromSettings(settings, CycleCallTimeoutSeconds)
+                    : OhsmcpClient.FromSettings(settings);
                 var tools = await client.ListToolsAsync().ConfigureAwait(false);
                 var target = tools.FirstOrDefault(tool =>
                     tool.Name.Equals(name, StringComparison.OrdinalIgnoreCase));

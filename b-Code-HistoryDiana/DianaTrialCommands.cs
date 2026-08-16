@@ -87,7 +87,7 @@ internal static class DianaTrialCommands
             Domain = "HistoryDiana",
             CommandClass = "trial",
             Summary = "调用候选模块的一条命令并返回其原始结果",
-            Example = "diana.trial.call name=janus.proj.list args=\"status=true\"",
+            Example = "diana.trial.call name=janus.proj.list args=\"filter=2026-020\"",
             Parameters =
             [
                 Text("name", "候选命令全名，例如 janus.proj.list", required: true, position: 0),
@@ -361,9 +361,10 @@ internal static class DianaTrialCommands
             var context = new CommandContext(descriptor, values, $"diana.trial:{target.Alias}", progress, cancellation);
             var result = await descriptor.Handler(context).ConfigureAwait(false);
             var prefix = result.Success ? "✓" : "✗";
+            var display = CapTrialMessage(result.Message);
             return CommandResult.Ok(
-                $"[{target.Alias}] {descriptor.Name} {prefix} {result.Message}",
-                new { trial = target.Alias, command = descriptor.Name, result.Success, result.Message, result.Data });
+                $"[{target.Alias}] {descriptor.Name} {prefix} {display}",
+                new { trial = target.Alias, command = descriptor.Name, result.Success, Message = display, result.Data });
         }
         catch (OperationCanceledException)
         {
@@ -374,6 +375,16 @@ internal static class DianaTrialCommands
             // 候选模块抛出的异常是试用的有效结果，不能让它打穿 Diana。
             return CommandResult.Fail($"[{target.Alias}] {descriptor.Name} 抛出 {ex.GetType().Name}: {ex.Message}");
         }
+    }
+
+    private const int MaximumTrialCallMessageChars = 4000;
+
+    private static string CapTrialMessage(string message)
+    {
+        if (string.IsNullOrEmpty(message) || message.Length <= MaximumTrialCallMessageChars)
+            return message;
+        return message[..MaximumTrialCallMessageChars]
+               + "\n……正文已截断。列表类命令请加 filter=，不要一次拉全表。";
     }
 
     /// <summary>把控制台写法的参数串绑定到候选命令的参数表，缺省值按 ParameterSpec 补齐。</summary>
