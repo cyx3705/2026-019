@@ -67,6 +67,10 @@
              <c>vulcan.module.trialui.load/unload</c> 承接，本进程只经前端命令代理把请求递过去。
              前端那份同样不进正式模块快照。
             
+             <c>ui=true</c> 时若正式模块已装载，会先执行宿主 3.11.5 的 <c>vulcan.module.unload</c>
+             卸掉同名正式模块（释放工具窗口 Id），试用结束再 <c>vulcan.module.reload</c> 装回。
+             不得对 HistoryDiana 自己做这件事，否则本命令会把自己卸掉。
+            
              另需注意：<c>Attach</c> 是候选模块自己的代码，它可能启动监视器、全局快捷键一类的进程级副作用，
              这些副作用会和正式模块并存直到 <c>diana.trial.unload</c>。
              </remarks>
@@ -85,6 +89,18 @@
              注册表里找同名命令，而 <c>vulcan.module.trialui.*</c> 在后台只是一份前端代理，
              绕开注册表直接投递少一层依赖，前端没连上时也能立刻给出确定的失败。
              </summary>
+        </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.TryDisplaceFormalModuleAsync(HistoryVulcan.Core.Modules.IModuleContext,System.String,System.Threading.CancellationToken)">
+            <summary>
+            <c>ui=true</c> 前若同名正式模块已装载，先走宿主 <c>vulcan.module.unload</c> 释放工具窗口 Id。
+            卸 HistoryDiana 自己会把本命令从 MCP 摘掉，因此跳过。
+            </summary>
+        </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.RestoreFormalModulesIfIdleAsync(HistoryVulcan.Core.Modules.IModuleContext,System.Boolean,System.Threading.CancellationToken)">
+            <summary>
+            没有仍占用正式模块位置的试用时，把 z 里的正式模块装回来。
+            返回 reload 的结果；未发起 reload 时返回 <see langword="null"/>。
+            </summary>
         </member>
         <member name="T:HistoryDiana.DianaTrialCommands.TrialLoadContext">
             <summary>
