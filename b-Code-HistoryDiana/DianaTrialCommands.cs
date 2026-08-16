@@ -22,7 +22,8 @@ namespace HistoryDiana;
 ///   只能经 <c>diana.trial.call</c> 调用，因此不会和正式模块的同名命令抢注册，
 ///   也不会出现在补全、面板和 MCP 工具表里。
 ///
-/// 默认不建界面，验的是命令行为本身；<c>ui=true</c> 走人工验收路径。**界面不在本进程创建**：
+/// MCP 默认 <c>ui=true</c>：一条命令完成卸同名正式模块、内存试用和前端验收界面。
+/// 只验调用面时显式 <c>ui=false</c>。**界面不在本进程创建**：
 /// Diana 住在无窗 <c>--service</c> 后台进程，那里没有 <c>IShellUiRegistrar</c> 也没有 Dispatcher，
 /// 而 WPF 对象不可能递过进程边界。候选程序集因此在前端再装一份——由宿主 3.11.4 的
 /// <c>vulcan.module.trialui.load/unload</c> 承接，本进程只经前端命令代理把请求递过去。
@@ -44,6 +45,27 @@ internal static class DianaTrialCommands
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(host);
+
+        registry.Register(new CommandDescriptor
+        {
+            Name = "diana.trial.load",
+            Domain = "HistoryDiana",
+            CommandClass = "trial",
+            Summary = "临时注册候选：先卸同名正式模块，再把指定目录装进内存；默认建验收界面。不改发现根、不写正式槽或 AppData",
+            Example = @"diana.trial.load path=F:\ai工作区\2026-024-HistoryMinerva\<工作区>\z-HistoryMinerva",
+            Parameters =
+            [
+                Text("path", "含 module.manifest.json 的目录（工作区 z-* 或候选目录均可）", required: true, position: 0),
+                Text("alias", "试用别名，省略时取清单里的模块名"),
+                Bool("ui", "是否建验收界面（并先卸同名正式模块）；看一眼时保持默认 true", "true"),
+            ],
+            Handler = async context => await LoadAsync(
+                host,
+                context.RequireString("path"),
+                context.GetString("alias"),
+                context.GetBool("ui", true),
+                context.Cancellation).ConfigureAwait(false),
+        });
 
         registry.Register(new CommandDescriptor
         {
@@ -120,7 +142,7 @@ internal static class DianaTrialCommands
 
         var manifestPath = Path.Combine(root, "module.manifest.json");
         if (!File.Exists(manifestPath))
-            return CommandResult.Fail($"不是 z 快照目录（缺 module.manifest.json）：{root}");
+            return CommandResult.Fail($"不是模块快照目录（缺 module.manifest.json）：{root}");
 
         string moduleName;
         string moduleVersion;
@@ -295,7 +317,7 @@ internal static class DianaTrialCommands
         CancellationToken cancellation)
     {
         if (Trials.IsEmpty)
-            return CommandResult.Fail("当前没有试用中的候选模块，先 diana.release.cycle。");
+            return CommandResult.Fail("当前没有试用中的候选模块，先 diana.trial.load 或 diana.release.cycle。");
 
         var candidates = Trials.Values
             .Where(trial => string.IsNullOrWhiteSpace(alias)
@@ -727,6 +749,7 @@ internal static class DianaTrialCommands
         {
             Name = name,
             Description = description,
+            Type = ParamType.Bool,
             Default = defaultValue,
             AllowedValues = ["true", "false"],
         };

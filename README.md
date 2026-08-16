@@ -34,8 +34,8 @@ Diana 不提供 UI 页面。
 
 ## 指令
 
-七类。当前固定 25 条命令，另按现场 z 动态登记 `diana.docs.<域>`；不要写死动态通道总数。
-命令按描述符投影为 MCP：只读命令是 `readonly`，七条显式写命令是 `standard`。
+七类。当前固定 26 条命令，另按现场 z 动态登记 `diana.docs.<域>`；不要写死动态通道总数。
+命令按描述符投影为 MCP：只读命令是 `readonly`，八条显式写命令是 `standard`。
 
 | 类 | 指令 | 用途 |
 | --- | --- | --- |
@@ -47,11 +47,11 @@ Diana 不提供 UI 页面。
 | `docs` | `diana.docs.<域>` | 一个 z 文件夹一条通道；省略 file 只列出，带 file 才读一篇 |
 | `worktree` | `diana.worktree.root` / `create` / `list` / `merge` | 建立、查看 AI 隔离工作树，或并回 main 并回收 |
 | `release` | `diana.release.modules` / `status` / `log` / `cycle` | cycle 跑完门禁并提交；status/log 只读排障 |
-| `trial` | `diana.trial.list` / `call` / `unload` | 候选模块只进内存的调用型试用；装载由 cycle 完成 |
+| `trial` | `diana.trial.load` / `list` / `call` / `unload` | 看一眼候选：卸同名正式模块并内存试用；默认建验收界面 |
 
-七条 `standard` 写命令是 `relay.call`、`release.cycle`、`trial.call/unload`、
+八条 `standard` 写命令是 `relay.call`、`release.cycle`、`trial.load/call/unload`、
 `worktree.root/create/merge`；其余命令均为 `readonly`。候选模块自己的命令不会直接进入 MCP 工具表，
-只能通过 `diana.trial.call` 调用。
+只能通过 `diana.trial.call` 调用。不要用 `vulcan.module.roots` 或拷 AppData 来看候选。
 
 ## 构建与验证
 
@@ -69,7 +69,7 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 即完成部署。模块发布不要关闭 Vulcan：宿主从内存加载 DLL，覆盖 z 后执行 `vulcan.module.reload`
 （管线在正式宿主运行时会自己调）。只有替换宿主 EXE 才需要停进程。
 
-当前 Diana 源码为 `1.10.4`；正式 `z-HistoryDiana` 仍为 `1.10.2`，直至本版本发布。
+当前 Diana 源码与正式 `z-HistoryDiana` 均为 `1.10.5`。
 
 ## 集中发布
 
