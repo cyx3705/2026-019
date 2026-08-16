@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Modules;
 using HistoryVulcan.Core.Storage;
@@ -80,7 +81,7 @@ internal static class DianaWorktreeCommands
             Name = "diana.worktree.merge",
             Domain = "HistoryDiana",
             CommandClass = "worktree",
-            Summary = "把 AI 工作区分支并回 main，卸试用并回收工作区（分支保留）",
+            Summary = "把 AI 工作区分支并回 main；先卸试用（含前端残留）再回收工作区，分支保留",
             Example = "diana.worktree.merge project=2026-020-HistoryJanus name=71c79b7-1-codex-fix",
             Parameters =
             [
@@ -271,16 +272,12 @@ internal static class DianaWorktreeCommands
         if (string.IsNullOrWhiteSpace(branch) || branch == "HEAD")
             return CommandResult.Fail("无法读取工作区分支名。");
 
-        if (DianaReleaseCommands.TryResolveModuleByProject(host.Settings, projectName, out var module))
-        {
-            await DianaTrialCommands.UnloadMatchingAsync(host, module.Name, worktreePath, cancellation)
-                .ConfigureAwait(false);
-        }
-        else
-        {
-            await DianaTrialCommands.UnloadMatchingAsync(host, null, worktreePath, cancellation)
-                .ConfigureAwait(false);
-        }
+        string? moduleName = DianaReleaseCommands.TryResolveModuleByProject(
+            host.Settings, projectName, out var module)
+            ? module.Name
+            : null;
+        var released = await DianaTrialCommands.ReleaseForWorktreeAsync(
+            host, moduleName, worktreePath, cancellation).ConfigureAwait(false);
 
         var (ffOutput, ffError) = Git(projectPath, "merge", "--ff-only", branch);
         string mergeNote;
@@ -300,15 +297,15 @@ internal static class DianaWorktreeCommands
             mergeNote = $"已合并 {branch}（非快进）";
         }
 
+        var removed = Remove(host.Settings, projectName, worktreeName, force: true, skipUnmergedGate: true);
+
         var reload = await host.Bus.ExecuteAsync("vulcan.module.reload", "diana.worktree.merge")
             .ConfigureAwait(false);
         var reloadNote = reload.Success
             ? "已 vulcan.module.reload 装入合并后的正式 z"
             : $"合并后热重载未成功（{reload.Message}），请手工 vulcan.module.reload";
 
-        var removed = Remove(host.Settings, projectName, worktreeName, force: true, skipUnmergedGate: true);
-
-        var text = new StringBuilder($"{mergeNote}。\n{reloadNote}\n{removed.Message}");
+        var text = new StringBuilder($"{mergeNote}。\n{released.Message}\n{removed.Message}\n{reloadNote}");
         if (!removed.Success)
             return CommandResult.Fail(text.ToString());
         return CommandResult.Ok(text.ToString(), new
@@ -392,10 +389,33 @@ internal static class DianaWorktreeCommands
             ? new[] { "worktree", "remove", "--force", gitPath }
             : ["worktree", "remove", gitPath];
         var (_, error) = Git(projectPath, arguments);
+        if (error != null
+            && !string.Equals(gitPath, worktreePath, StringComparison.OrdinalIgnoreCase)
+            && Directory.Exists(worktreePath))
+        {
+            var retryArgs = force
+                ? new[] { "worktree", "remove", "--force", worktreePath }
+                : new[] { "worktree", "remove", worktreePath };
+            var (_, retryError) = Git(projectPath, retryArgs);
+            if (retryError == null)
+                error = null;
+            else
+                error = $"{error}\n{retryError}";
+        }
+
         if (error != null)
         {
+            Git(projectPath, "worktree", "prune");
+            var leftoverAfterFail = TryDeleteDirectory(worktreePath);
+            if (leftoverAfterFail == null && !IsGitWorktree(projectPath, worktreeName))
+            {
+                return CommandResult.Ok(
+                    $"git worktree remove 失败但目录已删除（{error}）。分支保留未删。",
+                    new { Path = worktreePath });
+            }
+
             return CommandResult.Fail(force
-                ? $"移除失败：{error}"
+                ? $"移除失败：{error}" + (leftoverAfterFail == null ? "" : "\n" + leftoverAfterFail)
                 : $"移除失败（有未提交改动时加 force=true）：{error}");
         }
 
@@ -408,7 +428,7 @@ internal static class DianaWorktreeCommands
         }
         var text = $"已回收工作区 {worktreeName}，分支保留未删。";
         if (leftover != null)
-            text += "\n" + leftover;
+            return CommandResult.Fail(text);
         return CommandResult.Ok(text, new { Path = worktreePath });
     }
 
@@ -451,26 +471,43 @@ internal static class DianaWorktreeCommands
         return null;
     }
 
+    private static bool IsGitWorktree(string projectPath, string name)
+        => FindListedWorktree(projectPath, name) != null;
+
     private static string? TryDeleteDirectory(string path)
     {
-        if (!Directory.Exists(path))
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
             return null;
 
-        try
+        string? lastError = null;
+        for (var attempt = 0; attempt < 8; attempt++)
         {
-            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+            if (attempt > 0)
             {
-                File.SetAttributes(file, FileAttributes.Normal);
-                File.Delete(file);
+                DianaTrialCommands.CollectTrialAssemblies();
+                Thread.Sleep(250);
             }
 
-            Directory.Delete(path, recursive: true);
-            return Directory.Exists(path) ? $"工作区目录仍在：{path}" : null;
+            try
+            {
+                foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                    File.Delete(file);
+                }
+
+                Directory.Delete(path, recursive: true);
+                if (!Directory.Exists(path))
+                    return null;
+                lastError = "目录删除后仍存在";
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+            {
+                lastError = ex.Message;
+            }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return $"残留目录未能删除：{path}（{ex.Message}）";
-        }
+
+        return $"残留目录未能删除：{path}（{lastError}）";
     }
 
     private static string ResolveRoot(ISettingsService settings, string? rootOverride)
@@ -492,7 +529,14 @@ internal static class DianaWorktreeCommands
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
+                StandardOutputEncoding = new UTF8Encoding(false),
+                StandardErrorEncoding = new UTF8Encoding(false),
             };
+            startInfo.Environment["LC_ALL"] = "C.UTF-8";
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("core.quotepath=false");
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("i18n.logOutputEncoding=utf-8");
             foreach (var argument in arguments)
                 startInfo.ArgumentList.Add(argument);
 

@@ -579,6 +579,47 @@ internal static class DianaTrialCommands
     }
 
     /// <summary>
+    /// 回收工作区前释放试用：字典里的候选、前端残留界面，以及可回收 ALC 仍锁着的 DLL。
+    /// Diana 热重载会丢掉静态 <see cref="Trials"/>，但前端试用程序集和工作区文件还在。
+    /// </summary>
+    internal static async Task<CommandResult> ReleaseForWorktreeAsync(
+        IModuleContext host,
+        string? moduleName,
+        string worktreePath,
+        CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        var parts = new List<string>();
+        var matching = await UnloadMatchingAsync(host, moduleName, worktreePath, cancellation)
+            .ConfigureAwait(false);
+        parts.Add(matching.Message);
+
+        if (!string.IsNullOrWhiteSpace(moduleName) && host.Bus.FrontendExecutor != null)
+        {
+            var alias = moduleName.Trim();
+            var relay = await RelayToFrontendAsync(
+                    host,
+                    $"vulcan.module.trialui.unload alias={CommandParser.QuoteArg(alias)}",
+                    alias,
+                    cancellation)
+                .ConfigureAwait(false);
+            parts.Add(relay.Success
+                ? $"已拆除前端试用界面 {alias}"
+                : $"前端试用界面 {alias} 无需拆除或未能拆除：{relay.Message}");
+        }
+
+        CollectTrialAssemblies();
+        return CommandResult.Ok(string.Join('\n', parts));
+    }
+
+    internal static void CollectTrialAssemblies()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+    }
+
+    /// <summary>
     /// 把一条命令递给已连接的 Vulcan 前端。
     ///
     /// 走 <see cref="CommandBus.FrontendExecutor"/> 而不是 <c>Bus.ExecuteAsync</c>：后者会先在后台

@@ -82,6 +82,12 @@
         <member name="M:HistoryDiana.DianaTrialCommands.Tokenize(System.String)">
             <summary>按引号感知切分参数串；引号内的空格保留。</summary>
         </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.ReleaseForWorktreeAsync(HistoryVulcan.Core.Modules.IModuleContext,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            回收工作区前释放试用：字典里的候选、前端残留界面，以及可回收 ALC 仍锁着的 DLL。
+            Diana 热重载会丢掉静态 <see cref="F:HistoryDiana.DianaTrialCommands.Trials"/>，但前端试用程序集和工作区文件还在。
+            </summary>
+        </member>
         <member name="M:HistoryDiana.DianaTrialCommands.RelayToFrontendAsync(HistoryVulcan.Core.Modules.IModuleContext,System.String,System.String,System.Threading.CancellationToken)">
              <summary>
              把一条命令递给已连接的 Vulcan 前端。

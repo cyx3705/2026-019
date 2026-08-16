@@ -48,7 +48,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.10.5", moduleInfos[0].Version, "模块版本");
+    Equal("1.10.6", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
@@ -274,6 +274,16 @@ try
     var afterSkipUnload = await bus.ExecuteAsync("diana.trial.unload alias=smoke-janus-skip", "smoke");
     True(afterSkipUnload.Success, "卸未腾位的试用");
     Equal(1, reloadCount, "未腾位的试用卸完不得再 reload");
+
+    frontendCalls.Clear();
+    var orphanRelease = await DianaTrialCommands.ReleaseForWorktreeAsync(
+        context, "HistoryJanus", janusRoot, CancellationToken.None);
+    True(orphanRelease.Success, "回收工作区前释放试用必须成功");
+    True(
+        frontendCalls.Exists(call =>
+            call.StartsWith("vulcan.module.trialui.unload", StringComparison.Ordinal)
+            && call.Contains("HistoryJanus", StringComparison.Ordinal)),
+        "Trials 已空时仍须拆除前端试用界面，否则工作区 DLL 删不掉");
 
     var isolatedRegistry = new CommandRegistry();
     var isolatedLog = new TestLog();
