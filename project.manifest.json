@@ -32,14 +32,14 @@
     "generatedRoots": [
       "b-Code-HistoryDiana/bin",
       "b-Code-HistoryDiana/obj",
-      "z-Publish/current"
+      "z-Publish"
     ],
     "archiveRoots": [
       "b-Office-Diana/history",
-      "z-Publish"
+      "z-Publish/history"
     ],
     "releaseRoots": [
-      "z-HistoryDiana"
+      "z-Publish"
     ],
     "allowedRootDirectoryPrefixes": [
       "a-",
@@ -92,14 +92,13 @@
     },
     {
       "name": "HistoryVulcan",
-      "version": "3.11.6",
+      "version": "3.12.0",
       "purpose": "Diana 的模块 API、命令注册、MCP 投影与正式运行宿主"
     }
   ],
   "contextExclusions": [
     "b-Office-Diana/history/**",
     "z-Publish/**",
-    "z-HistoryDiana/**",
     "b-References/**",
     "**/bin/**",
     "**/obj/**",

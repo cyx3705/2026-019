@@ -198,7 +198,7 @@ internal static class DianaWorktreeCommands
             if (!File.Exists(Path.Combine(worktreePath, "Directory.Build.props")))
                 return "（项目没有 Directory.Build.props，未写本机覆盖点）";
 
-            var hostRoot = Path.Combine(DianaLibraryRoot.Resolve(settings), "2026-023-HistoryVulcan", "z-HistoryVulcan");
+            var hostRoot = Path.Combine(DianaLibraryRoot.Resolve(settings), "2026-023-HistoryVulcan", "z-Publish");
             var content = $"""
                 <Project>
                   <!-- 由 diana.worktree.create 生成：把宿主快照指回来源库根。不入库。 -->
@@ -533,7 +533,7 @@ internal static class DianaWorktreeCommands
         executable = Path.Combine(
             DianaLibraryRoot.Resolve(settings),
             "2026-023-HistoryVulcan",
-            "z-HistoryVulcan",
+            "z-Publish",
             "host",
             "HistoryVulcan.exe");
         if (!File.Exists(executable))

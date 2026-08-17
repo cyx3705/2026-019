@@ -65,12 +65,12 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 ## 部署
 
-宿主的模块发现仍扫描各项目根下的正式 `z-History*` 目录，因此发布到 [`z-HistoryDiana`](./z-HistoryDiana/)
-即完成模块部署；发布文档先落在 [`z-Publish/current`](./z-Publish/current/)，Diana 文档 MCP 优先从这里读取。
-模块发布不要关闭 Vulcan：宿主从内存加载 DLL，覆盖正式 z 后执行 `vulcan.module.reload`
+宿主只扫描 `%AppData%\HistoryVulcan\Modules`。发布器先在项目 [`z-Publish`](./z-Publish/)
+生成并验证根候选，再通过本机 `vulcan.module.install path=<z-Publish>` 原子安装并重载；Diana 文档 MCP
+只读取各项目根候选的 `docs/`。`vulcan.module.reload` 只重扫运行区，不再扫描项目目录。
 （管线在正式宿主运行时会自己调）。只有替换宿主 EXE 才需要停进程。
 
-当前正式快照为 `1.10.12`；本轮源码版本为 `1.10.13`，待下一次 Diana cycle 正式发布。
+当前根候选与源码版本均为 `1.10.13`；运行区版本以 Vulcan 返回的模块 revision 为准。
 
 ## 集中发布
 
@@ -81,7 +81,7 @@ Vulcan 保留宿主快照与门禁特例。候选构建的调用形状统一为
 `-Configuration Release -OutputRoot <候选目录>`。
 
 默认只生成并验证候选；正式提升必须显式加 `-Publish`。默认先部署后提交（允许脏工作树）；
-只有要从干净 HEAD 复现时才加 `-RequireCleanSource`。发布成功后提交源码与该项目的 `z-*`。
+只有要从干净 HEAD 复现时才加 `-RequireCleanSource`。发布成功后提交源码与该项目的 `z-Publish`。
 
 ```powershell
 .\b-Code\Publish-OneHistoryModule.ps1 -Module HistoryJanus

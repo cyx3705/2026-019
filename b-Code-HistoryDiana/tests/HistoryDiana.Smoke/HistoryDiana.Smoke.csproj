@@ -5,11 +5,13 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <HistoryVulcanPackageRoot Condition="'$(HistoryVulcanPackageRoot)' == '' and '$(HISTORYVULCAN_PACKAGE_ROOT)' != ''">$(HISTORYVULCAN_PACKAGE_ROOT)</HistoryVulcanPackageRoot>
+    <HistoryVulcanPackageRoot Condition="'$(HistoryVulcanPackageRoot)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\2026-023-HistoryVulcan\z-Publish</HistoryVulcanPackageRoot>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\HistoryDiana.csproj" />
     <Reference Include="HistoryVulcan.Core">
-      <HintPath>$(MSBuildThisFileDirectory)..\..\..\..\2026-023-HistoryVulcan\z-HistoryVulcan\host\HistoryVulcan.Core.dll</HintPath>
+      <HintPath>$(HistoryVulcanPackageRoot)\host\HistoryVulcan.Core.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>

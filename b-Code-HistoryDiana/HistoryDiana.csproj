@@ -14,7 +14,8 @@
   <PropertyGroup>
     <!-- AI 工作树落在库根之外时相对路径必然指空；diana.worktree.create 生成的
          Directory.Build.user.props 会设定 HistoryVulcanPackageRoot，这里据此推导。 -->
-    <HistoryVulcanPackageRoot Condition="'$(HistoryVulcanPackageRoot)' == ''">$(MSBuildThisFileDirectory)..\..\2026-023-HistoryVulcan\z-HistoryVulcan</HistoryVulcanPackageRoot>
+    <HistoryVulcanPackageRoot Condition="'$(HistoryVulcanPackageRoot)' == '' and '$(HISTORYVULCAN_PACKAGE_ROOT)' != ''">$(HISTORYVULCAN_PACKAGE_ROOT)</HistoryVulcanPackageRoot>
+    <HistoryVulcanPackageRoot Condition="'$(HistoryVulcanPackageRoot)' == ''">$(MSBuildThisFileDirectory)..\..\2026-023-HistoryVulcan\z-Publish</HistoryVulcanPackageRoot>
     <HistoryVulcanHostDir Condition="'$(HistoryVulcanHostDir)' == ''">$(HistoryVulcanPackageRoot)\host</HistoryVulcanHostDir>
   </PropertyGroup>
   <ItemGroup>

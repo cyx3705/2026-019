@@ -8,7 +8,7 @@ using HistoryVulcan.Core.Storage;
 namespace HistoryDiana;
 
 /// <summary>
-/// 跨项目说明书从各项目的 z-Publish 候选发布区读取，并兼容过渡期的 z-History 快照。
+/// 跨项目说明书只从各项目 z-Publish 根候选读取，避免把历史包或旧发布区当成当前真值。
 /// 现场扫描生成通道，避免手维护清单漂移。
 /// </summary>
 internal static class DianaZDocCommands
@@ -369,42 +369,9 @@ internal static class DianaZDocCommands
 
     private static IEnumerable<string> DiscoverPackages(string project)
     {
-        var publishCurrent = Path.Combine(project, "z-Publish", "current");
-        if (Directory.Exists(publishCurrent))
-        {
-            if (File.Exists(Path.Combine(publishCurrent, "SHA256SUMS")))
-                yield return publishCurrent;
-
-            IEnumerable<string> publishedPackages;
-            try
-            {
-                publishedPackages = Directory.GetDirectories(publishCurrent);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                publishedPackages = [];
-            }
-
-            foreach (var package in publishedPackages)
-            {
-                if (File.Exists(Path.Combine(package, "SHA256SUMS")))
-                    yield return package;
-            }
-        }
-
-        IEnumerable<string> legacyPackages;
-        try
-        {
-            legacyPackages = Directory.GetDirectories(project, "z-*")
-                .Where(package => !Path.GetFileName(package).Equals("z-Publish", StringComparison.OrdinalIgnoreCase));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            legacyPackages = [];
-        }
-
-        foreach (var package in legacyPackages)
-            yield return package;
+        var publishRoot = Path.Combine(project, "z-Publish");
+        if (Directory.Exists(publishRoot) && File.Exists(Path.Combine(publishRoot, "SHA256SUMS")))
+            yield return publishRoot;
     }
 
     private static void TryAddChannel(
@@ -571,10 +538,10 @@ internal static class DianaZDocCommands
     private static string RenderCatalog(IReadOnlyList<ZDocChannel> channels)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("Z 文档通道（优先扫描 z-Publish/current，兼容旧 z-History；现场读取 SHA256SUMS）");
+        builder.AppendLine("Z 文档通道（只扫描各项目 z-Publish 根候选，现场读取 SHA256SUMS）");
         builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用其中一个 diana.docs.<通道>。省略 file 只列出该通道。");
         builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 3.11.6），否则只返回目录。");
-        builder.AppendLine("若列出了通道但命令尚未登记，执行 vulcan.module.reload 让 Diana 按当前 z 重新附着。");
+        builder.AppendLine("若列出了通道但命令尚未登记，执行 vulcan.module.reload 让 Diana 按当前运行区重新附着。");
         if (channels.Count == 0)
         {
             builder.Append("当前工作树根下没有含 SHA256SUMS 的 z-* 快照。");

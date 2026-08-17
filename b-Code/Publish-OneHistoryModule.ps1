@@ -19,7 +19,7 @@ $dianaRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $projectsRoot = [IO.Path]::GetFullPath((Join-Path $dianaRoot '..'))
 $transactionId = [Guid]::NewGuid().ToString('N')
 $stamp = [DateTimeOffset]::UtcNow.ToString('yyyyMMdd-HHmmss')
-$workRoot = Join-Path $dianaRoot "z-Publish\work\module-release-$transactionId"
+$workRoot = Join-Path ([IO.Path]::GetTempPath()) "OneHistory.Package\module-release-$transactionId"
 
 # 普通 module 的定义与验证步骤由注册表提供；新增普通模块只需新增一项 JSON。
 $registryPath = Join-Path $dianaRoot 'b-Code\module-publish.manifest.json'
@@ -51,8 +51,8 @@ $definitions['HistoryVulcan'] = [ordered]@{
         SourceManifest = ''
         SnapshotManifest = 'manifest.json'
         IdentityProperty = 'product'
-        CandidateDirectory = 'z-Publish\current'
-        FormalDirectory = 'z-HistoryVulcan'
+        CandidateDirectory = 'z-Publish'
+        FormalDirectory = 'z-Publish'
         BuildScript = 'b-Code-HistoryVulcan\eng\Build-HistoryVulcanPackage.ps1'
         PackageDocuments = 'b-Office\package'
         ContractScript = ''
@@ -88,7 +88,7 @@ function Repair-VulcanAutostart {
 }
 
 function Get-VulcanHostRoot {
-    $path = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-HistoryVulcan'
+    $path = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-Publish'
     if (-not (Test-Path -LiteralPath $path -PathType Container)) {
         return $null
     }
@@ -623,7 +623,7 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($SourceWorktree)) {
         # 逐处透传参数太脆：构建、门禁、验证各有各的调用点，漏一处就又是一次"撞了才发现"。
         # 改用环境变量，所有子进程一并继承；脚本侧在参数为空时回落到它。
-        $hostSnapshot = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-HistoryVulcan'
+        $hostSnapshot = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-Publish'
         $env:HISTORYVULCAN_PACKAGE_ROOT = $hostSnapshot
         $buildArguments += @('-HistoryVulcanPackageRoot', $hostSnapshot)
     }
@@ -665,121 +665,22 @@ try {
 
     if (-not $Publish) {
         if ($SourceWorktree) {
-            Write-Host "Writing worktree candidate into $formalRoot (host does not scan this path)..."
-            New-Item -ItemType Directory -Force -Path $formalRoot | Out-Null
-            Sync-FormalSnapshotInPlace $candidateRoot $formalRoot
-            Assert-ModuleSnapshot $formalRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
-            Write-Host "Worktree candidate z is ready: $formalRoot"
-            Write-Host 'Host scan roots still ignore worktree z-*; diana.release.cycle will trial-load it in memory.'
+            Write-Host "Worktree candidate z-Publish is ready: $candidateRoot"
+            Write-Host 'Vulcan runtime scans only AppData; diana.release.cycle will trial-load this verified root candidate.'
             return
         }
 
         Write-Host "Verified candidate $Module ${moduleVersion}: $candidateRoot"
-        Write-Host 'Pass -Publish to promote the candidate, including z/docs.'
+        Write-Host 'Pass -Publish to run the release cycle; Vulcan installation is performed by the host command path.'
         return
     }
-
-    $formalStage = Join-Path $workRoot 'formal'
-    Copy-Item -LiteralPath $candidateRoot -Destination $formalStage -Recurse
-    Assert-ModuleSnapshot $formalStage $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
-
-    $oldVersion = 'none'
-    $formalManifestPath = Join-Path $formalRoot $definition.SnapshotManifest
-    if (Test-Path -LiteralPath $formalManifestPath -PathType Leaf) {
-        $oldVersion = [string](([IO.File]::ReadAllText($formalManifestPath) | ConvertFrom-Json).version)
-    }
-    $formalBackup = Join-Path $projectRoot "z-Publish\history\$Module\$oldVersion-$stamp-$($transactionId.Substring(0, 8))"
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $formalBackup) | Out-Null
-
-    $formalBackedUp = $false
-    $formalPromoted = $false
-    $usedInPlacePromote = $false
-    try {
-        $liveHost = Test-VulcanFormalProcessRunning
-        if ($definition.Kind -eq 'host' -and $Module -eq 'HistoryVulcan' -and
-            (Test-Path -LiteralPath $formalRoot)) {
-            Stop-VulcanFormalProcesses
-            $liveHost = $false
-        }
-
-        $promoteInPlace = $definition.Kind -eq 'module' -and $liveHost -and (Test-Path -LiteralPath $formalRoot)
-        if ($promoteInPlace) {
-            Write-Host "正式宿主在运行：模块快照原地覆盖，不关闭 Vulcan、不重命名 z 目录"
-            try {
-                Copy-Item -LiteralPath $formalRoot -Destination $formalBackup -Recurse -ErrorAction Stop
-                $formalBackedUp = $true
-            }
-            catch {
-                Write-Warning "无法把旧模块快照复制到 history，继续原地覆盖：$($_.Exception.Message)"
-            }
-            Sync-FormalSnapshotInPlace $formalStage $formalRoot
-            $formalPromoted = $true
-            $usedInPlacePromote = $true
-        }
-        elseif (Test-Path -LiteralPath $formalRoot) {
-            $moved = $false
-            for ($attempt = 0; $attempt -lt 5 -and -not $moved; $attempt++) {
-                try {
-                    Move-Item -LiteralPath $formalRoot -Destination $formalBackup -ErrorAction Stop
-                    $moved = $true
-                }
-                catch {
-                    if ($attempt -lt 4) {
-                        Start-Sleep -Milliseconds 500
-                    }
-                }
-            }
-            if ($moved) {
-                $formalBackedUp = $true
-            } else {
-                Write-Warning "正式目录无法重命名，改用已验证候选的原地同步：$formalRoot"
-                Sync-FormalSnapshotInPlace $formalStage $formalRoot
-                $formalPromoted = $true
-            }
-        }
-        if (-not $formalPromoted) {
-            Move-Item -LiteralPath $formalStage -Destination $formalRoot
-            $formalPromoted = $true
-        }
-        Assert-ModuleSnapshot $formalRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
-    }
-    catch {
-        if ($usedInPlacePromote -and $formalBackedUp -and (Test-Path -LiteralPath $formalBackup)) {
-            Sync-FormalSnapshotInPlace $formalBackup $formalRoot
-        }
-        elseif ($formalPromoted -and (Test-Path -LiteralPath $formalRoot)) {
-            Move-Item -LiteralPath $formalRoot -Destination (Join-Path $workRoot 'failed-formal')
-            if ($formalBackedUp -and (Test-Path -LiteralPath $formalBackup)) {
-                Move-Item -LiteralPath $formalBackup -Destination $formalRoot
-            }
-        }
-        elseif ($formalBackedUp -and (Test-Path -LiteralPath $formalBackup)) {
-            Move-Item -LiteralPath $formalBackup -Destination $formalRoot
-        }
-        throw
-    }
-
-    Write-Host "Published $Module ${moduleVersion}: $formalRoot"
-    Write-Host "Published documents: $(Join-Path $formalRoot 'docs')"
-    if ($formalBackedUp) { Write-Host "Previous formal snapshot: $formalBackup" }
-
-    if ($definition.Kind -eq 'module') {
-        if (Invoke-VulcanLiveCommand 'vulcan.module.reload') {
-            Write-Host '模块已在运行中的宿主热重载，无需关闭 Vulcan'
-        }
-        elseif (Test-VulcanFormalProcessRunning) {
-            Write-Warning '正式宿主仍在运行，但热重载未成功。可在控制台执行 vulcan.module.reload，不要为了换模块而关宿主。'
-        }
-        else {
-            Write-Host '正式宿主未在运行；下次启动会装载新的 z 快照'
-        }
-    }
-
+    Assert-ModuleSnapshot $candidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+    Write-Host "Published candidate $Module ${moduleVersion}: $candidateRoot"
+    Write-Host "Published documents: $(Join-Path $candidateRoot 'docs')"
     if ($definition.Kind -eq 'host' -and $Module -eq 'HistoryVulcan') {
-        Repair-VulcanAutostart $formalRoot
+        Repair-VulcanAutostart $candidateRoot
     }
-
-    Write-Host "Deploy-then-commit: 现在提交 $projectRoot 的源码与 $($definition.FormalDirectory)。跨模块说明书从各自 z/docs 经 Diana MCP 读取。"
+    Write-Host "Deploy-then-commit: 提交 $projectRoot 的源码与 z-Publish 根候选；运行时安装由 vulcan.module.install 完成。"
 }
 finally {
     if (Test-Path -LiteralPath $workRoot) {

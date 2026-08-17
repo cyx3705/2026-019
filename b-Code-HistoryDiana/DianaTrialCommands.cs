@@ -29,7 +29,7 @@ namespace HistoryDiana;
 /// <c>vulcan.module.trialui.load/unload</c> 承接，本进程只经前端命令代理把请求递过去。
 /// 前端那份同样不进正式模块快照。
 ///
-/// <c>ui=true</c> 时若正式模块已装载，会先执行宿主 3.11.5 的 <c>vulcan.module.unload</c>
+/// <c>ui=true</c> 时若正式模块已装载，会先执行宿主 3.12.0 的 <c>vulcan.module.unload</c>
 /// 卸掉同名正式模块（释放工具窗口 Id），试用结束再 <c>vulcan.module.reload</c> 装回。
 /// 不得对 HistoryDiana 自己做这件事，否则本命令会把自己卸掉。
 /// Diana 热重载会丢掉静态试用表但可回收 ALC 仍可能锁着 DLL：宿主登记命令时、unload 和 merge
@@ -55,7 +55,7 @@ internal static class DianaTrialCommands
             Domain = "HistoryDiana",
             CommandClass = "trial",
             Summary = "临时注册候选：先卸同名正式模块，再把指定目录装进内存；默认建验收界面。不改发现根、不写正式槽或 AppData",
-            Example = @"diana.trial.load path=F:\ai工作区\2026-024-HistoryMinerva\<工作区>\z-Publish\current\HistoryMinerva",
+            Example = @"diana.trial.load path=F:\ai工作区\2026-024-HistoryMinerva\<工作区>\z-Publish",
             Parameters =
             [
                 Text("path", "含 module.manifest.json 的目录（工作区 z-* 或候选目录均可）", required: true, position: 0),
@@ -817,7 +817,7 @@ internal static class DianaTrialCommands
         if (IsUnknownCommand(unloaded, "vulcan.module.unload"))
         {
             return (false, CommandResult.Fail(
-                "ui=true 卸正式模块需要 HistoryVulcan 3.11.5 及以上（vulcan.module.unload）。当前宿主没有这条命令。"));
+                "ui=true 卸正式模块需要 HistoryVulcan 3.12.0 及以上（vulcan.module.unload）。当前宿主没有这条命令。"));
         }
 
         if (unloaded.Message.Contains("没有已装载的模块", StringComparison.Ordinal))

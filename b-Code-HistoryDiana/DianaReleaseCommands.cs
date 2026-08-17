@@ -464,7 +464,25 @@ internal static class DianaReleaseCommands
         var text = new StringBuilder($"cycle 完成：{moduleName} 已门禁通过并提交。\n仓库: {repoRoot}\nrun={run}");
         if (!isWorktree)
         {
-            text.Append("\n主树已正式写入 z 并热重载。");
+            if (string.Equals(module.Kind, "module", StringComparison.OrdinalIgnoreCase))
+            {
+                var publishSnapshot = Path.Combine(repoRoot, module.FormalDirectory);
+                progress?.Report($"门禁完成，正在调用 Vulcan 安装 {publishSnapshot}…");
+                var install = await host.Bus.ExecuteAsync(
+                    $"vulcan.module.install path={CommandParser.QuoteArg(publishSnapshot)}",
+                    "diana.release.cycle",
+                    cancellation).ConfigureAwait(false);
+                if (!install.Success)
+                {
+                    return CommandResult.Fail(
+                        $"候选已提交，但 Vulcan 安装失败：{install.Message}\nrun={run}\n路径: {publishSnapshot}");
+                }
+                text.Append("\n主树 z-Publish 候选已由 Vulcan 原子安装并重载。");
+            }
+            else
+            {
+                text.Append("\n主树 z-Publish 宿主候选已通过门禁；重启切换由宿主部署步骤完成。");
+            }
             return CommandResult.Ok(text.ToString(), new
             {
                 Module = moduleName,
@@ -558,7 +576,7 @@ internal static class DianaReleaseCommands
         module = default!;
         if (name.Equals("HistoryVulcan", StringComparison.OrdinalIgnoreCase))
         {
-            module = new ReleaseModule("HistoryVulcan", "host", "2026-023-HistoryVulcan", "z-HistoryVulcan");
+            module = new ReleaseModule("HistoryVulcan", "host", "2026-023-HistoryVulcan", "z-Publish");
             return true;
         }
 
@@ -601,7 +619,7 @@ internal static class DianaReleaseCommands
         module = default!;
         if (projectDirectory.Equals("2026-023-HistoryVulcan", StringComparison.OrdinalIgnoreCase))
         {
-            module = new ReleaseModule("HistoryVulcan", "host", "2026-023-HistoryVulcan", "z-HistoryVulcan");
+            module = new ReleaseModule("HistoryVulcan", "host", "2026-023-HistoryVulcan", "z-Publish");
             return true;
         }
 
