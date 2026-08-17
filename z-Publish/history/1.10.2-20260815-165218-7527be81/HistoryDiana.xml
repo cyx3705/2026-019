@@ -1,0 +1,167 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>HistoryDiana</name>
+    </assembly>
+    <members>
+        <member name="T:HistoryDiana.DianaKitCommands">
+            <summary>
+            小工具集：哈希、编码、标识与时间。都是无副作用的一行计算，合并为一个 <c>kit</c> 类
+            而不是按 text / identity / time 各开一个只有一两条命令的类。
+            </summary>
+        </member>
+        <member name="T:HistoryDiana.DianaLibraryRoot">
+            <summary>
+            项目库根：一项目一仓的 HistoryClio。旧 Vesta 配置改写到 Clio。
+            </summary>
+        </member>
+        <member name="T:HistoryDiana.DianaProjectAlignmentCommands">
+            <summary>Provides read-only project manifest, current-document, and cross-project alignment views.</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaRelayCommands">
+            <summary>
+            MCP 工具中继：按 OneHistory 当前的 MCP 策略实时列举、查看和调用工具。
+            </summary>
+            <remarks>
+            存在的理由是快照过期问题——AI 会话持有的工具目录是任务开始时的旧快照，
+            模块热重载后就与实际可见工具不一致。这里每次都现查现调，绕开那份旧快照。
+            </remarks>
+        </member>
+        <member name="T:HistoryDiana.DianaReleaseCommands">
+             <summary>
+             发布管线的命令面：把 <c>Publish-OneHistoryModule.ps1</c> 作为分离子进程拉起，
+             让模块发布和其余能力一样原生暴露为 MCP 工具。
+             </summary>
+             <remarks>
+             关键约束：运行状态只落在日志文件里，不放在本模块的内存里。
+             管线跑到最后会 <c>vulcan.module.reload</c>，发布 HistoryDiana 时本模块自身会在发布途中
+             被卸载重载——任何存在静态字段里的运行记录都会随之蒸发。因此 start 立即返回 run 标识，
+             status/log 一律现场读日志目录，Diana 被换掉也不影响追踪。
+            
+             子进程自己把 stdout/stderr 重定向进日志（PowerShell 的 <c>*&gt;</c>），Diana 不做流泵送：
+             泵送线程会随模块卸载而中断，日志就断在半截。退出码单独落一个纯 ASCII 的
+             <c>.exit</c> 文件，status 据此判断"仍在跑 / 成功 / 失败"，不依赖进程句柄。
+             </remarks>
+        </member>
+        <member name="M:HistoryDiana.DianaReleaseCommands.ReadTail(System.String,System.Int32,System.Int32@,System.Boolean@)">
+            <summary>读日志末尾；允许被子进程同时写入，因此以共享模式打开。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaReleaseCommands.Quote(System.String)">
+            <summary>PowerShell 单引号字符串：内部单引号翻倍转义。</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaTrialCommands">
+             <summary>
+             候选模块的试用装载：把 AI 工作区里的 z 快照按调用面加载进内存，供人工逐条调用验证。
+             </summary>
+             <remarks>
+             这条通道刻意不做三件事，否则它就变成了第二套模块系统：
+             ①不写盘——不改 settings、不动模块槽、不碰正式 z，宿主重启后痕迹全无；
+             ②不做发现——只认调用方显式给出的路径，不扫描、不监听、不注册发现根；
+             ③不进宿主实注册表——候选命令登记在本通道私有的 <see cref="T:HistoryVulcan.Core.Commands.CommandRegistry"/> 里，
+               只能经 <c>diana.trial.call</c> 调用，因此不会和正式模块的同名命令抢注册，
+               也不会出现在补全、面板和 MCP 工具表里。
+            
+             默认不建界面，验的是命令行为本身；<c>ui=true</c> 走人工验收路径。**界面不在本进程创建**：
+             Diana 住在无窗 <c>--service</c> 后台进程，那里没有 <c>IShellUiRegistrar</c> 也没有 Dispatcher，
+             而 WPF 对象不可能递过进程边界。候选程序集因此在前端再装一份——由宿主 3.11.4 的
+             <c>vulcan.module.trialui.load/unload</c> 承接，本进程只经前端命令代理把请求递过去。
+             前端那份同样不进正式模块快照。
+            
+             另需注意：<c>Attach</c> 是候选模块自己的代码，它可能启动监视器、全局快捷键一类的进程级副作用，
+             这些副作用会和正式模块并存直到 <c>diana.trial.unload</c>。
+             </remarks>
+        </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.BindArguments(HistoryVulcan.Core.Commands.CommandDescriptor,System.String)">
+            <summary>把控制台写法的参数串绑定到候选命令的参数表，缺省值按 ParameterSpec 补齐。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.Tokenize(System.String)">
+            <summary>按引号感知切分参数串；引号内的空格保留。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.RelayToFrontendAsync(HistoryVulcan.Core.Modules.IModuleContext,System.String,System.String,System.Threading.CancellationToken)">
+             <summary>
+             把一条命令递给已连接的 Vulcan 前端。
+            
+             走 <see cref="P:HistoryVulcan.Core.Commands.CommandBus.FrontendExecutor"/> 而不是 <c>Bus.ExecuteAsync</c>：后者会先在后台
+             注册表里找同名命令，而 <c>vulcan.module.trialui.*</c> 在后台只是一份前端代理，
+             绕开注册表直接投递少一层依赖，前端没连上时也能立刻给出确定的失败。
+             </summary>
+        </member>
+        <member name="T:HistoryDiana.DianaTrialCommands.TrialLoadContext">
+            <summary>
+            候选模块的可回收装载上下文。
+            </summary>
+            <remarks>
+            宿主契约程序集必须落回默认上下文：候选模块实现的 <see cref="T:HistoryVulcan.Core.Modules.IModuleContextAware"/>
+            必须和 Diana 看到的是同一个类型，否则装载后接口判定恒为 false，试用面永远是空的。
+            只有候选自带的私有依赖才从快照目录加载。
+            </remarks>
+        </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.TrialLoadContext.#ctor(System.String,System.String)">
+            <summary>
+            候选模块的可回收装载上下文。
+            </summary>
+            <remarks>
+            宿主契约程序集必须落回默认上下文：候选模块实现的 <see cref="T:HistoryVulcan.Core.Modules.IModuleContextAware"/>
+            必须和 Diana 看到的是同一个类型，否则装载后接口判定恒为 false，试用面永远是空的。
+            只有候选自带的私有依赖才从快照目录加载。
+            </remarks>
+        </member>
+        <member name="T:HistoryDiana.DianaTrialCommands.TrialModuleContext">
+            <summary>
+            交给候选模块的宿主上下文：服务全部转发宿主真身，只把命令登记引到私有注册表。
+            </summary>
+        </member>
+        <member name="M:HistoryDiana.DianaTrialCommands.TrialModuleContext.#ctor(HistoryVulcan.Core.Modules.IModuleContext,HistoryVulcan.Core.Commands.CommandRegistry)">
+            <summary>
+            交给候选模块的宿主上下文：服务全部转发宿主真身，只把命令登记引到私有注册表。
+            </summary>
+        </member>
+        <member name="T:HistoryDiana.DianaWorktreeCommands">
+             <summary>
+             AI 工作区的命令面：开分支工作树、列出、回收。
+             </summary>
+             <remarks>
+             位置不硬编码。优先级是 <c>root=</c> 参数 &gt; 设置项 <c>ai.worktreeroot</c> &gt; 默认
+             <see cref="F:HistoryDiana.DianaWorktreeCommands.DefaultRoot"/>，因此默认能用、想改随时改、单次想换也不用改设置。
+            
+             分支名与目录名同形：<c>ai/&lt;项目&gt;/&lt;短SHA&gt;-&lt;序号&gt;-&lt;标识&gt;</c>。
+             带短 SHA 是为了让工作区一眼看出基于哪个提交；带序号是因为同一提交上常并行开多个尝试，
+             上一轮 Janus 的性能修复和工作区特性就是同一 SHA 的 -1 与 -2。
+             </remarks>
+        </member>
+        <member name="M:HistoryDiana.DianaWorktreeCommands.WriteBuildOverride(System.String,HistoryVulcan.Core.Storage.ISettingsService)">
+            <summary>
+            在新工作树里写下本机覆盖点，让它一诞生就能构建。
+            </summary>
+            <remarks>
+            各工程按相对路径引用宿主 z 快照，假定本仓与 2026-023-HistoryVulcan 在同一库根下；
+            而 AI 工作树落在库根之外，那条相对路径必然指空，表现为上百个"找不到类型"。
+            这里把 HistoryVulcanPackageRoot 指回来源库根的绝对路径。文件不入库（各项目 .gitignore 已登记），
+            因此工作树从诞生起就是干净的；项目侧没有 Directory.Build.props 时不写，避免留下无人 Import 的孤儿文件。
+            </remarks>
+        </member>
+        <member name="M:HistoryDiana.DianaWorktreeCommands.FindIdleWorktree(System.String,System.String)">
+            <summary>找出"开了但没干活"的工作区：既无未提交改动，其分支也没有领先主干的提交。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaWorktreeCommands.ResolveRootPublic(HistoryVulcan.Core.Storage.ISettingsService)">
+            <summary>供同模块的其他命令解析工作区根，避免第二处默认值。</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaZDocCommands">
+            <summary>
+            跨项目说明书只从各项目 <c>z-*</c> 读取。现场扫描生成通道，避免手维护清单漂移。
+            </summary>
+        </member>
+        <member name="T:HistoryDiana.HistoryDianaCommands">
+            <summary>Registers the HistoryDiana read-only worktree inspection commands.</summary>
+        </member>
+        <member name="M:HistoryDiana.HistoryDianaCommands.Attach(HistoryVulcan.Core.Modules.IModuleContext)">
+            <summary>Attaches the host-owned settings store and stages all module commands.</summary>
+        </member>
+        <member name="M:HistoryDiana.OhsmcpClient.TryReadModuleNames(System.Text.Json.JsonElement,System.Collections.Generic.IReadOnlySet{System.String}@)">
+            <summary>
+            从 command_list 的行数组提取模块工具名。structuredContent 优先路径与
+            content 回退路径共用本函数,确保两条路径解析逻辑不漂移。
+            </summary>
+        </member>
+    </members>
+</doc>
