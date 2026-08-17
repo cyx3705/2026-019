@@ -19,7 +19,7 @@ $dianaRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $projectsRoot = [IO.Path]::GetFullPath((Join-Path $dianaRoot '..'))
 $transactionId = [Guid]::NewGuid().ToString('N')
 $stamp = [DateTimeOffset]::UtcNow.ToString('yyyyMMdd-HHmmss')
-$workRoot = Join-Path ([IO.Path]::GetTempPath()) "OneHistory.Package\module-release-$transactionId"
+$workRoot = $null
 
 # 普通 module 的定义与验证步骤由注册表提供；新增普通模块只需新增一项 JSON。
 $registryPath = Join-Path $dianaRoot 'b-Code\module-publish.manifest.json'
@@ -446,6 +446,7 @@ if (-not [string]::IsNullOrWhiteSpace($SourceWorktree)) {
 else {
     $projectRoot = Assert-ChildPath (Join-Path $projectsRoot $definition.ProjectDirectory) $projectsRoot 'Module project'
 }
+$workRoot = Join-Path $projectRoot ".publish-stage\module-release-$transactionId"
 $versionPropsPath = Join-Path $projectRoot $definition.VersionProps
 $sourceManifestPath = Join-Path $projectRoot $definition.SourceManifest
 $publishRoot = Assert-ChildPath (Join-Path $projectRoot $definition.CandidateDirectory) $projectRoot 'Publish directory'
@@ -490,13 +491,12 @@ try {
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $projectRoot $definition.BuildScript),
         '-Configuration', 'Release', '-OutputRoot', $stagedCandidateRoot
     )
-    if (-not [string]::IsNullOrWhiteSpace($SourceWorktree)) {
-        # 逐处透传参数太脆：构建、门禁、验证各有各的调用点，漏一处就又是一次"撞了才发现"。
-        # 改用环境变量，所有子进程一并继承；脚本侧在参数为空时回落到它。
-        $hostSnapshot = Get-VulcanHostRoot
-        $env:HISTORYVULCAN_PACKAGE_ROOT = $hostSnapshot
-        $buildArguments += @('-HistoryVulcanPackageRoot', $hostSnapshot)
+    $hostSnapshot = Get-VulcanHostRoot
+    if ([string]::IsNullOrWhiteSpace($hostSnapshot)) {
+        throw 'HistoryVulcan host snapshot is missing under 2026-023-HistoryVulcan/z-Publish'
     }
+    $env:HISTORYVULCAN_PACKAGE_ROOT = $hostSnapshot
+    $buildArguments += @('-HistoryVulcanPackageRoot', $hostSnapshot)
     Invoke-Checked 'powershell.exe' $buildArguments $projectRoot 'Build candidate package'
     Assert-ModuleSnapshot $stagedCandidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
 
@@ -554,7 +554,7 @@ try {
     Write-Host ('Deploy-then-commit: commit source and z-Publish candidate in {0}; runtime reload is vulcan.module.install via diana.release.cycle.' -f $projectRoot)
 }
 finally {
-    if (Test-Path -LiteralPath $workRoot) {
+    if (-not [string]::IsNullOrWhiteSpace($workRoot) -and (Test-Path -LiteralPath $workRoot)) {
         Remove-Item -LiteralPath $workRoot -Recurse -Force
     }
 }
