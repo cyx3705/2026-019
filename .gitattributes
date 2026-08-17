@@ -229,3 +229,6 @@ Pro filter=lfs diff=lfs merge=lfs -text
 *.prtpl filter=lfs diff=lfs merge=lfs -text
 *.pl filter=lfs diff=lfs merge=lfs -text
 Premiere filter=lfs diff=lfs merge=lfs -text
+
+# Published package hashes cover exact bytes; Git must not normalize package content.
+z-Publish/** binary
