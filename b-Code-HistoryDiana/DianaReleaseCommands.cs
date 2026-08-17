@@ -16,8 +16,8 @@ namespace HistoryDiana;
 /// </summary>
 /// <remarks>
 /// 关键约束：运行状态只落在日志文件里，不放在本模块的内存里。
-/// 管线跑到最后会 <c>vulcan.module.reload</c>，发布 HistoryDiana 时本模块自身会在发布途中
-/// 被卸载重载——任何存在静态字段里的运行记录都会随之蒸发。因此 start 立即返回 run 标识，
+/// 门禁提交后对模块调用 <c>vulcan.module.install</c> 热重载（与测试、模块页按钮同一接口）。
+/// 发布 HistoryDiana 时本模块自身会在热重载途中被替换——任何存在静态字段里的运行记录都会随之蒸发。因此 start 立即返回 run 标识，
 /// status/log 一律现场读日志目录，Diana 被换掉也不影响追踪。
 ///
 /// 子进程自己把 stdout/stderr 重定向进日志（PowerShell 的 <c>*&gt;</c>），Diana 不做流泵送：
@@ -88,21 +88,19 @@ internal static class DianaReleaseCommands
             Name = "diana.release.cycle",
             Domain = "HistoryDiana",
             CommandClass = "release",
-            Summary = "跑通门禁、写入本树 z 并提交；工作区再卸正式模块做内存试用",
+            Summary = "跑通门禁、写入版本化候选并提交；模块候选严格替换到 Vulcan 运行区",
             Example = "diana.release.cycle name=HistoryJanus msg=fix-layout worktree=abc-1-codex-fix",
             Parameters =
             [
                 Text("name", "已登记的模块名，见 diana.release.modules", required: true, position: 0),
                 Text("msg", "提交说明", required: true, position: 1),
                 Text("worktree", "AI 工作区目录名或绝对路径；省略则在主树正式促级后提交"),
-                Bool("ui", "工作区试用是否建验收界面（并先卸同名正式模块）", "true"),
             ],
             Handler = async context => await CycleAsync(
                 host,
                 context.RequireString("name"),
                 context.RequireString("msg"),
                 context.GetString("worktree"),
-                context.GetBool("ui"),
                 context.Progress,
                 context.Cancellation).ConfigureAwait(false),
         });
@@ -404,7 +402,6 @@ internal static class DianaReleaseCommands
         string name,
         string message,
         string? worktree,
-        bool createUi,
         IProgress<string>? progress,
         CancellationToken cancellation)
     {
@@ -462,68 +459,42 @@ internal static class DianaReleaseCommands
         }
 
         var text = new StringBuilder($"cycle 完成：{moduleName} 已门禁通过并提交。\n仓库: {repoRoot}\nrun={run}");
-        if (!isWorktree)
-        {
-            if (string.Equals(module.Kind, "module", StringComparison.OrdinalIgnoreCase))
-            {
-                var publishSnapshot = Path.Combine(repoRoot, module.FormalDirectory);
-                progress?.Report($"门禁完成，正在调用 Vulcan 安装 {publishSnapshot}…");
-                var install = await host.Bus.ExecuteAsync(
-                    $"vulcan.module.install path={CommandParser.QuoteArg(publishSnapshot)}",
-                    "diana.release.cycle",
-                    cancellation).ConfigureAwait(false);
-                if (!install.Success)
-                {
-                    return CommandResult.Fail(
-                        $"候选已提交，但 Vulcan 安装失败：{install.Message}\nrun={run}\n路径: {publishSnapshot}");
-                }
-                text.Append("\n主树 z-Publish 候选已由 Vulcan 原子安装并重载。");
-            }
-            else
-            {
-                text.Append("\n主树 z-Publish 宿主候选已通过门禁；重启切换由宿主部署步骤完成。");
-            }
-            return CommandResult.Ok(text.ToString(), new
-            {
-                Module = moduleName,
-                Worktree = (string?)null,
-                Run = run,
-                Committed = true,
-                Trial = (string?)null,
-            });
-        }
-
         if (!string.Equals(module.Kind, "module", StringComparison.OrdinalIgnoreCase))
         {
-            text.Append("\n宿主候选不走 trial，可继续在工作区开发或 diana.worktree.merge。");
-            text.Append("\n若对话根已在工作区内（grok 切过根），合并前先迁出。");
+            text.Append(isWorktree
+                ? "\n宿主候选不热重载模块槽，可继续在工作区开发或 diana.worktree.merge。"
+                : "\n主树 z-Publish 宿主候选已通过门禁；重启切换由宿主部署步骤完成。");
+            if (isWorktree)
+                text.Append("\n若对话根已在工作区内（grok 切过根），合并前先迁出。");
             return CommandResult.Ok(text.ToString(), new
             {
                 Module = moduleName,
-                Worktree = repoRoot,
+                Worktree = isWorktree ? repoRoot : null,
                 Run = run,
                 Committed = true,
-                Trial = (string?)null,
             });
         }
 
-        var snapshot = Path.Combine(repoRoot, module.FormalDirectory);
-        progress?.Report($"提交完成，正在试用装载 {snapshot}…");
-        await DianaTrialCommands.UnloadMatchingAsync(host, moduleName, snapshot, cancellation)
-            .ConfigureAwait(false);
-        var trial = await DianaTrialCommands.LoadFromPathAsync(
-            host, snapshot, alias: null, createUi, cancellation).ConfigureAwait(false);
-        text.Append('\n').Append(trial.Success ? trial.Message : "试用未成功（提交已保留，不回滚）：" + trial.Message);
-        text.Append("\n可继续在此工作区开发，或 diana.worktree.merge 并回主线。");
-        text.Append("\n若对话根已在工作区内（grok 切过根），合并前先迁到项目主树或 Diana 再 merge；合并会删工作区目录。其他 AI 对话不在工作区里，可直接 merge。");
-        return trial.Success
+        progress?.Report("提交完成，正在调用 Vulcan 热重载当前候选…");
+        var reload = await DianaHotReload.InstallCurrentAsync(
+            host, repoRoot, moduleName, "host:diana.release.cycle", cancellation).ConfigureAwait(false);
+        text.Append('\n').Append(reload.Success
+            ? reload.Message
+            : "候选已提交，但 Vulcan 热重载未成功（不自动回滚）：" + reload.Message);
+        text.Append("\n测试不通过时，从主树候选或 z-Publish/history 再调同一热重载接口，不会自动恢复。");
+        if (isWorktree)
+        {
+            text.Append("\n可继续在此工作区开发，或 diana.worktree.merge 并回主线。");
+            text.Append("\n若对话根已在工作区内（grok 切过根），合并前先迁到项目主树或 Diana 再 merge；合并会删工作区目录。其他 AI 对话不在工作区里，可直接 merge。");
+        }
+
+        return reload.Success
             ? CommandResult.Ok(text.ToString(), new
             {
                 Module = moduleName,
-                Worktree = repoRoot,
+                Worktree = isWorktree ? repoRoot : null,
                 Run = run,
                 Committed = true,
-                Trial = snapshot,
             })
             : CommandResult.Fail(text.ToString());
     }

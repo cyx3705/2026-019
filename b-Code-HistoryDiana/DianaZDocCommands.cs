@@ -360,7 +360,6 @@ internal static class DianaZDocCommands
             .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
             .Select(group => group
                 .OrderBy(item => item.Documents.Count == 0 ? 1 : 0)
-                .ThenBy(item => item.Folder.StartsWith("z-Publish/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
                 .ThenBy(item => item.PackagePath, StringComparer.OrdinalIgnoreCase)
                 .First())
             .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
@@ -370,8 +369,8 @@ internal static class DianaZDocCommands
     private static IEnumerable<string> DiscoverPackages(string project)
     {
         var publishRoot = Path.Combine(project, "z-Publish");
-        if (Directory.Exists(publishRoot) && File.Exists(Path.Combine(publishRoot, "SHA256SUMS")))
-            yield return publishRoot;
+        foreach (var package in DianaPublishPackages.EnumerateCurrent(publishRoot))
+            yield return package.Path;
     }
 
     private static void TryAddChannel(
@@ -538,13 +537,13 @@ internal static class DianaZDocCommands
     private static string RenderCatalog(IReadOnlyList<ZDocChannel> channels)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("Z 文档通道（只扫描各项目 z-Publish 根候选，现场读取 SHA256SUMS）");
+        builder.AppendLine("Z 文档通道（只扫描各项目 z-Publish/History*-v* 当前候选，现场读取 SHA256SUMS）");
         builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用其中一个 diana.docs.<通道>。省略 file 只列出该通道。");
         builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 3.11.6），否则只返回目录。");
         builder.AppendLine("若列出了通道但命令尚未登记，执行 vulcan.module.reload 让 Diana 按当前运行区重新附着。");
         if (channels.Count == 0)
         {
-            builder.Append("当前工作树根下没有含 SHA256SUMS 的 z-* 快照。");
+            builder.Append("当前项目库下没有合规的 z-Publish/History*-v* 当前候选。");
             return builder.ToString();
         }
 

@@ -34,8 +34,8 @@ Diana 不提供 UI 页面。
 
 ## 指令
 
-七类。当前固定 26 条命令，另按现场 z 动态登记 `diana.docs.<域>`；不要写死动态通道总数。
-命令按描述符投影为 MCP：只读命令是 `readonly`，八条显式写命令是 `standard`。
+七类。当前固定 24 条命令，另按现场 z 动态登记 `diana.docs.<域>`；不要写死动态通道总数。
+命令按描述符投影为 MCP：只读命令是 `readonly`，六条显式写命令是 `standard`。
 
 | 类 | 指令 | 用途 |
 | --- | --- | --- |
@@ -47,11 +47,12 @@ Diana 不提供 UI 页面。
 | `docs` | `diana.docs.<域>` | 一个 z 文件夹一条通道；省略 file 只列出，带 file 才读一篇 |
 | `worktree` | `diana.worktree.root` / `create` / `list` / `merge` | 建立、查看 AI 隔离工作树，或并回 main 并回收 |
 | `release` | `diana.release.modules` / `status` / `log` / `cycle` | cycle 跑完门禁并提交；status/log 只读排障 |
-| `trial` | `diana.trial.load` / `list` / `call` / `unload` | 看一眼候选：卸同名正式模块并内存试用；默认建验收界面 |
+| `trial` | `diana.trial.load` | 把候选或历史包交给 Vulcan 热重载（`vulcan.module.install`） |
 
-八条 `standard` 写命令是 `relay.call`、`release.cycle`、`trial.load/call/unload`、
-`worktree.root/create/merge`；其余命令均为 `readonly`。候选模块自己的命令不会直接进入 MCP 工具表，
-只能通过 `diana.trial.call` 调用。不要用 `vulcan.module.roots` 或拷 AppData 来看候选。
+六条 `standard` 写命令是 `relay.call`、`release.cycle`、`trial.load`、
+`worktree.root/create/merge`；其余命令均为 `readonly`。测试和部署都只调同一热重载接口：
+`vulcan.module.install` 校验完整包、原子替换 AppData 运行槽并扫描注册。测试不通过时，手动选择主树候选
+或 `z-Publish/history/HistoryX-vX.Y.Z` 再热重载；不自动恢复。
 
 ## 构建与验证
 
@@ -66,11 +67,12 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 ## 部署
 
 宿主只扫描 `%AppData%\HistoryVulcan\Modules`。发布器先在项目 [`z-Publish`](./z-Publish/)
-生成并验证根候选，再通过本机 `vulcan.module.install path=<z-Publish>` 原子安装并重载；Diana 文档 MCP
-只读取各项目根候选的 `docs/`。`vulcan.module.reload` 只重扫运行区，不再扫描项目目录。
+生成并验证版本化候选 `HistoryX-vX.Y.Z/`，再由 `diana.release.cycle` / `diana.trial.load`
+调用本机 `vulcan.module.install` 热重载（与模块页「热重载」同一接口）；Diana 文档 MCP
+只读取该候选中的 `docs/`。`vulcan.module.reload` 只重扫运行区，不再扫描项目目录。
 （管线在正式宿主运行时会自己调）。只有替换宿主 EXE 才需要停进程。
 
-当前根候选与源码版本均为 `1.10.13`；运行区版本以 Vulcan 返回的模块 revision 为准。
+当前源码版本为 `1.10.14`；运行区版本以 Vulcan 返回的模块 revision 为准。
 
 ## 集中发布
 

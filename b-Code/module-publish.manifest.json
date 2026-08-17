@@ -137,7 +137,7 @@
           "arguments": [
             "run",
             "--project",
-            "b-Code-MercuryDock\\tests\\Smoke\\Smoke.csproj",
+            "b-Code-Tests\\HistoryMercury.Smoke\\HistoryMercury.Smoke.csproj",
             "-c",
             "Release",
             "-p:NuGetAudit=false"

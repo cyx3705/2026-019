@@ -40,7 +40,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         DianaRelayCommands.Register(registry, settings);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
         DianaZDocCommands.Register(registry, settings);
-        // 候选模块试用：只进内存、不做发现、只供调用，见 DianaTrialCommands 的类型注释。
+        // 测试与部署都只调 Vulcan 热重载（vulcan.module.install），不保留并行私有加载器。
         DianaTrialCommands.Register(registry, context);
         // 发布管线的命令面：分离子进程 + 日志追踪，见 DianaReleaseCommands 的类型注释。
         DianaReleaseCommands.Register(registry, context);

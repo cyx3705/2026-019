@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Module,
     [switch]$Publish,
@@ -6,7 +6,7 @@ param(
     [switch]$RequireCleanSource,
     # AI 工作区里的提交级验证：从指定工作树构建并跑门禁。正式 Clio z 的 -Publish
     # 永远只从主树来，因此本参数与 -Publish 互斥。无 -Publish 时，工作树把已验证
-    # 候选写入该树自己的 z-*（宿主不扫描），供 diana.release.cycle 试用装载。
+    # 候选写入该树自己的版本化 z-Publish 包，供 diana.release.cycle 严格安装到运行区。
     # 不能叫 ProjectRoot：PowerShell 变量大小写不敏感，会和脚本内的 $projectRoot 撞成同一个，
     # 被后者覆盖后判断恒真，表现为主树构建也去传工作树参数。
     [string]$SourceWorktree
@@ -88,267 +88,25 @@ function Repair-VulcanAutostart {
 }
 
 function Get-VulcanHostRoot {
-    $path = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-Publish'
-    if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+    $publishRoot = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-Publish'
+    if (-not (Test-Path -LiteralPath $publishRoot -PathType Container)) {
         return $null
     }
-    return Assert-ChildPath $path $projectsRoot 'Vulcan host snapshot'
-}
-
-function Get-VulcanFormalExecutable {
-    $moduleRoot = Get-VulcanHostRoot
-    if ([string]::IsNullOrWhiteSpace($moduleRoot)) {
-        return $null
-    }
-    $formalRoot = [IO.Path]::GetFullPath($moduleRoot).TrimEnd('\') + '\'
-    $hostExecutable = [IO.Path]::GetFullPath((Join-Path $moduleRoot 'host\HistoryVulcan.exe'))
-    if (-not $hostExecutable.StartsWith($formalRoot, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "HistoryVulcan formal executable escaped the formal root: $hostExecutable"
-    }
-    return $hostExecutable
-}
-
-# 调用方一律写成 @(Get-VulcanFormalProcesses)：函数返回数组时 PowerShell 会把它摊进管线，
-# 空数组因此摊成 $null，而 StrictMode 下 $null.Count 直接抛「找不到属性 Count」。
-# 这条路径平时不走——模块发布时 Vulcan 通常开着——直到先促级宿主（管线会停掉它）
-# 再促级模块，才第一次撞上。不要改成 `,@()` 包一层：那会让 @() 收集到「一个空数组」，
-# Count 变成 1，宿主没运行也判成在运行，后面按进程对象用它就更难查了。
-function Get-VulcanFormalProcesses {
-    $hostExecutable = Get-VulcanFormalExecutable
-    if ([string]::IsNullOrWhiteSpace($hostExecutable) -or
-        -not (Test-Path -LiteralPath $hostExecutable -PathType Leaf)) {
-        return @()
-    }
-
-    return @(Get-CimInstance Win32_Process -Filter "Name='HistoryVulcan.exe'" |
+    $packages = @(Get-ChildItem -LiteralPath $publishRoot -Directory -Filter 'HistoryVulcan-v*' |
         Where-Object {
-            -not [string]::IsNullOrWhiteSpace([string]$_.ExecutablePath) -and
-            [IO.Path]::GetFullPath([string]$_.ExecutablePath).Equals(
-                $hostExecutable,
-                [StringComparison]::OrdinalIgnoreCase)
+            (Test-Path -LiteralPath (Join-Path $_.FullName 'manifest.json') -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $_.FullName 'SHA256SUMS') -PathType Leaf)
         })
-}
-
-function Test-VulcanFormalProcessRunning {
-    return @(Get-VulcanFormalProcesses).Count -gt 0
-}
-
-function Get-PublicApiBaselineEntries {
-    param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [switch]$SkipNullableEnable
-    )
-
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        return $null
+    if ($packages.Count -eq 1) {
+        return Assert-ChildPath $packages[0].FullName $projectsRoot 'Vulcan host snapshot'
     }
-
-    return @(
-        [IO.File]::ReadAllLines($Path, [Text.UTF8Encoding]::new($false)) |
-            ForEach-Object { $_.Trim().TrimStart([char]0xFEFF) } |
-            Where-Object {
-                ($_ -ne '') -and (-not $SkipNullableEnable -or $_ -ne '#nullable enable')
-            }
-    )
-}
-
-function Ensure-HostPublicApiBaseline {
-    param([Parameter(Mandatory = $true)][string]$ProjectRoot)
-
-    $componentRoot = Join-Path $ProjectRoot 'b-Code-HistoryVulcan'
-    $baselineRoot = Join-Path $componentRoot 'eng\public-api-baselines'
-    $versionProps = Join-Path $componentRoot 'VulcanVersion.props'
-    if (-not (Test-Path -LiteralPath $versionProps -PathType Leaf)) {
-        throw "VulcanVersion.props is missing: $versionProps"
+    # 迁移窗口兼容旧的根部平铺候选；新发布完成后该分支自然退出。
+    if ($packages.Count -eq 0 -and
+        (Test-Path -LiteralPath (Join-Path $publishRoot 'manifest.json') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $publishRoot 'SHA256SUMS') -PathType Leaf)) {
+        return Assert-ChildPath $publishRoot $projectsRoot 'Legacy Vulcan host snapshot'
     }
-
-    $versionMatch = [regex]::Match(
-        [IO.File]::ReadAllText($versionProps),
-        '<VulcanVersion>(?<version>[^<]+)</VulcanVersion>')
-    if (-not $versionMatch.Success) {
-        throw 'VulcanVersion.props does not contain VulcanVersion'
-    }
-
-    $version = $versionMatch.Groups['version'].Value.Trim()
-    $currentDir = Join-Path $baselineRoot $version
-    if (Test-Path -LiteralPath $currentDir -PathType Container) {
-        return
-    }
-
-    if (-not (Test-Path -LiteralPath $baselineRoot -PathType Container)) {
-        throw "Public API baseline root is missing: $baselineRoot"
-    }
-
-    $previous = @(
-        Get-ChildItem -LiteralPath $baselineRoot -Directory |
-            Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } |
-            Where-Object { [version]$_.Name -lt [version]$version } |
-            Sort-Object { [version]$_.Name }
-    ) | Select-Object -Last 1
-    if ($null -eq $previous) {
-        throw "Missing approved Unshipped baseline directory for $version, and no previous version exists to inherit: $currentDir"
-    }
-
-    $projects = @(
-        'HistoryVulcan.Core'
-        'HistoryVulcan.Services'
-        'HistoryVulcan.ServiceHost'
-        'HistoryVulcan.Shell'
-    )
-    $changed = @()
-    foreach ($project in $projects) {
-        $current = Get-PublicApiBaselineEntries -Path (Join-Path $componentRoot "src\$project\PublicAPI.Unshipped.txt") -SkipNullableEnable
-        $approved = Get-PublicApiBaselineEntries -Path (Join-Path $previous.FullName "$project.Unshipped.txt")
-        if ($null -eq $current -or $null -eq $approved) {
-            $changed += $project
-            continue
-        }
-
-        $difference = @(Compare-Object -ReferenceObject @($approved) -DifferenceObject @($current))
-        if ($difference.Count -ne 0) {
-            $changed += $project
-        }
-    }
-
-    if ($changed.Count -gt 0) {
-        throw @"
-Public API Unshipped differs from $($previous.Name) ($($changed -join ', ')). Do not auto-approve a new contract.
-After review, copy the previous baseline then replace Unshipped files with the intended contract:
-  Copy-Item -LiteralPath '$($previous.FullName)' -Destination '$currentDir' -Recurse
-"@
-    }
-
-    Copy-Item -LiteralPath $previous.FullName -Destination $currentDir -Recurse
-    Write-Host "Public API unchanged; inherited baseline $($previous.Name) -> $version"
-}
-
-function Stop-VulcanFormalProcesses {
-    $hostExecutable = Get-VulcanFormalExecutable
-    if ([string]::IsNullOrWhiteSpace($hostExecutable)) {
-        Write-Host 'HistoryVulcan 正式宿主快照不存在，跳过停进程'
-        return
-    }
-    for ($attempt = 0; $attempt -lt 3; $attempt++) {
-        $targets = @(Get-VulcanFormalProcesses)
-        if ($targets.Count -eq 0) {
-            Write-Host 'HistoryVulcan 正式宿主进程已停止，可安全提升快照'
-            return
-        }
-
-        foreach ($target in $targets) {
-            Stop-Process -Id $target.ProcessId -Force -ErrorAction Stop
-        }
-        Start-Sleep -Milliseconds 300
-    }
-
-    $remaining = @(Get-VulcanFormalProcesses)
-    if ($remaining.Count -gt 0) {
-        throw "HistoryVulcan 正式宿主仍在运行，拒绝移动正式快照：$($remaining.ProcessId -join ', ')"
-    }
-}
-
-function Invoke-VulcanLiveCommand {
-    param(
-        [Parameter(Mandatory = $true)][string]$Text,
-        [int]$TimeoutSeconds = 120
-    )
-
-    if (-not (Test-VulcanFormalProcessRunning)) {
-        return $false
-    }
-
-    $endpointPath = Join-Path $env:APPDATA 'HistoryVulcan\service\endpoint.json'
-    if (-not (Test-Path -LiteralPath $endpointPath -PathType Leaf)) {
-        Write-Warning "正式宿主在运行，但找不到服务端点 $endpointPath，无法热重载"
-        return $false
-    }
-
-    $endpoint = [IO.File]::ReadAllText($endpointPath, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
-    $port = [int]$endpoint.port
-    $processId = [int]$endpoint.processId
-    if ($port -lt 1024 -or $port -gt 65535) {
-        Write-Warning "正式宿主端点端口无效：$port"
-        return $false
-    }
-    if ($processId -gt 0) {
-        $running = @(Get-VulcanFormalProcesses | Where-Object { $_.ProcessId -eq $processId })
-        if ($running.Count -eq 0) {
-            Write-Warning "endpoint.json 指向的服务进程 $processId 不是当前正式宿主，跳过热重载"
-            return $false
-        }
-    }
-
-    $uri = "http://127.0.0.1:$port/api/command"
-    $headers = @{
-        'X-HistoryVulcan-Client' = 'Shell'
-        'X-Client-Name' = 'Publish-OneHistoryModule'
-        'X-Session-Id' = [Guid]::NewGuid().ToString('N')
-    }
-    $body = (@{ text = $Text; source = 'publish' } | ConvertTo-Json -Compress)
-    try {
-        $response = Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType 'application/json; charset=utf-8' `
-            -Headers $headers -TimeoutSec $TimeoutSeconds
-    }
-    catch {
-        Write-Warning "向正式宿主发送 $Text 失败：$($_.Exception.Message)"
-        return $false
-    }
-
-    $success = $false
-    if ($null -ne $response.success) { $success = [bool]$response.success }
-    elseif ($null -ne $response.Success) { $success = [bool]$response.Success }
-    if (-not $success) {
-        $message = [string]$response.message
-        if ([string]::IsNullOrWhiteSpace($message)) { $message = [string]$response.Message }
-        Write-Warning "正式宿主拒绝 $Text：$message"
-        return $false
-    }
-
-    Write-Host "Live host: $Text"
-    return $true
-}
-
-function Sync-FormalSnapshotInPlace {
-    param(
-        [Parameter(Mandatory = $true)][string]$Stage,
-        [Parameter(Mandatory = $true)][string]$FormalRoot
-    )
-
-    $stagePrefix = [IO.Path]::GetFullPath($Stage).TrimEnd('\') + '\'
-    $files = @(Get-ChildItem -LiteralPath $Stage -File -Recurse)
-    if ($files.Count -eq 0) {
-        throw "In-place snapshot stage is empty: $Stage"
-    }
-
-    $stageKeys = @{}
-    $checksum = $null
-    foreach ($file in $files) {
-        $key = $file.FullName.Substring($stagePrefix.Length)
-        if ($file.Name -eq 'SHA256SUMS') {
-            $checksum = $file
-            continue
-        }
-        $stageKeys[$key] = $true
-        $destination = Join-Path $FormalRoot $key
-        $directory = Split-Path -Parent $destination
-        if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
-            New-Item -ItemType Directory -Force -Path $directory | Out-Null
-        }
-        Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
-    }
-    if ($null -ne $checksum) {
-        $key = $checksum.FullName.Substring($stagePrefix.Length)
-        $stageKeys[$key] = $true
-        Copy-Item -LiteralPath $checksum.FullName -Destination (Join-Path $FormalRoot $key) -Force
-    }
-
-    $formalPrefix = [IO.Path]::GetFullPath($FormalRoot).TrimEnd('\') + '\'
-    foreach ($existing in @(Get-ChildItem -LiteralPath $FormalRoot -File -Recurse)) {
-        $key = $existing.FullName.Substring($formalPrefix.Length)
-        if (-not $stageKeys.ContainsKey($key)) {
-            Remove-Item -LiteralPath $existing.FullName -Force
-        }
-    }
+    throw "HistoryVulcan z-Publish must contain exactly one HistoryVulcan-v<version> candidate: $publishRoot"
 }
 
 function Assert-ChildPath {
@@ -482,6 +240,118 @@ function Write-SnapshotChecksums {
     [IO.File]::WriteAllLines($sumsPath, $lines, [Text.UTF8Encoding]::new($false))
 }
 
+function Get-PackageIdentity {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    foreach ($pair in @(
+        @('module.manifest.json', 'name'),
+        @('manifest.json', 'product')
+    )) {
+        $path = Join-Path $Root $pair[0]
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        $manifest = [IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
+        $name = [string]$manifest.($pair[1])
+        $version = [string]$manifest.version
+        if (-not [string]::IsNullOrWhiteSpace($name) -and $version -match '^\d+\.\d+\.\d+$') {
+            return [pscustomobject]@{ Name = $name; Version = $version }
+        }
+    }
+    throw "Package identity manifest is missing or invalid: $Root"
+}
+
+function Assert-ArchiveSlot {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    if (-not (Test-Path -LiteralPath $Destination -PathType Container)) { return }
+    $sourceSums = [IO.File]::ReadAllText((Join-Path $Source 'SHA256SUMS')).Replace("`r`n", "`n")
+    $destinationSums = [IO.File]::ReadAllText((Join-Path $Destination 'SHA256SUMS')).Replace("`r`n", "`n")
+    if (-not $sourceSums.Equals($destinationSums, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "History package already exists with different content. Bump the version instead of overwriting: $Destination"
+    }
+}
+
+function Copy-PackageDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
+        Copy-Item -LiteralPath $item.FullName -Destination $Destination -Recurse -Force
+    }
+}
+
+function Archive-PackageDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Package,
+        [Parameter(Mandatory = $true)][string]$HistoryRoot
+    )
+
+    $identity = Get-PackageIdentity $Package
+    $archive = Join-Path $HistoryRoot "$($identity.Name)-v$($identity.Version)"
+    Assert-ArchiveSlot $Package $archive
+    if (-not (Test-Path -LiteralPath $archive -PathType Container)) {
+        Copy-PackageDirectory $Package $archive
+        Write-Host "Archived previous candidate: $archive"
+    }
+    return $archive
+}
+
+function Publish-VersionedCandidate {
+    param(
+        [Parameter(Mandatory = $true)][string]$Stage,
+        [Parameter(Mandatory = $true)][string]$PublishRoot,
+        [Parameter(Mandatory = $true)][string]$ExpectedName,
+        [Parameter(Mandatory = $true)][string]$ExpectedVersion
+    )
+
+    $packageName = "$ExpectedName-v$ExpectedVersion"
+    $historyRoot = Join-Path $PublishRoot 'history'
+    New-Item -ItemType Directory -Force -Path $historyRoot | Out-Null
+    $incoming = Join-Path $PublishRoot ".incoming-$transactionId"
+    Copy-PackageDirectory $Stage $incoming
+    Assert-ModuleSnapshot $incoming $ExpectedName $ExpectedVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+
+    $destination = Join-Path $PublishRoot $packageName
+    # A version is immutable. Re-running an identical package is idempotent; changing
+    # its content under the same version must fail before the existing candidate moves.
+    Assert-ArchiveSlot $Stage $destination
+
+    $current = @(Get-ChildItem -LiteralPath $PublishRoot -Directory -Filter 'History*-v*')
+    foreach ($package in $current) {
+        Archive-PackageDirectory $package.FullName $historyRoot | Out-Null
+    }
+
+    # 迁移旧根部平铺候选。history 自身与新式候选目录不属于旧包内容。
+    $legacyManifest = Join-Path $PublishRoot $definition.SnapshotManifest
+    if (Test-Path -LiteralPath $legacyManifest -PathType Leaf) {
+        $legacy = Join-Path $workRoot 'legacy-package'
+        New-Item -ItemType Directory -Force -Path $legacy | Out-Null
+        foreach ($item in Get-ChildItem -LiteralPath $PublishRoot -Force) {
+            if ($item.Name -eq 'history' -or $item.Name -like 'History*-v*' -or $item.Name -like '.incoming-*') { continue }
+            Copy-Item -LiteralPath $item.FullName -Destination $legacy -Recurse -Force
+        }
+        $legacyIdentity = Get-PackageIdentity $legacy
+        Assert-ModuleSnapshot $legacy $legacyIdentity.Name $legacyIdentity.Version $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+        Archive-PackageDirectory $legacy $historyRoot | Out-Null
+    }
+
+    foreach ($package in $current) {
+        Remove-Item -LiteralPath $package.FullName -Recurse -Force
+    }
+    foreach ($item in @(Get-ChildItem -LiteralPath $PublishRoot -Force)) {
+        if ($item.Name -eq 'history' -or $item.Name -eq (Split-Path -Leaf $incoming)) { continue }
+        Remove-Item -LiteralPath $item.FullName -Recurse -Force
+    }
+
+    Move-Item -LiteralPath $incoming -Destination $destination
+    return $destination
+}
+
 function Merge-PackageDocumentsIntoSnapshot {
     param(
         [Parameter(Mandatory = $true)][string]$SourceRoot,
@@ -578,10 +448,10 @@ else {
 }
 $versionPropsPath = Join-Path $projectRoot $definition.VersionProps
 $sourceManifestPath = Join-Path $projectRoot $definition.SourceManifest
-$candidateRoot = Assert-ChildPath (Join-Path $projectRoot $definition.CandidateDirectory) $projectRoot 'Candidate directory'
-$formalRoot = Assert-ChildPath (Join-Path $projectRoot $definition.FormalDirectory) $projectRoot 'Formal directory'
+$publishRoot = Assert-ChildPath (Join-Path $projectRoot $definition.CandidateDirectory) $projectRoot 'Publish directory'
 $documentSourceRoot = Join-Path $projectRoot $definition.PackageDocuments
 $moduleVersion = Read-ModuleVersion $versionPropsPath $definition.VersionProperty
+$stagedCandidateRoot = Join-Path $workRoot "$Module-v$moduleVersion"
 
 # 模块的身份写在三处(版本源、源 manifest、快照 manifest)，这里对齐前两处。
 # 宿主只有两处：版本源与快照 manifest，没有源 manifest 可对，也就少一处可漂移。
@@ -618,17 +488,17 @@ try {
     # 因此把真实的宿主快照根显式传下去。主树构建时不传，脚本沿用原有缺省，行为不变。
     $buildArguments = @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $projectRoot $definition.BuildScript),
-        '-Configuration', 'Release', '-OutputRoot', $candidateRoot
+        '-Configuration', 'Release', '-OutputRoot', $stagedCandidateRoot
     )
     if (-not [string]::IsNullOrWhiteSpace($SourceWorktree)) {
         # 逐处透传参数太脆：构建、门禁、验证各有各的调用点，漏一处就又是一次"撞了才发现"。
         # 改用环境变量，所有子进程一并继承；脚本侧在参数为空时回落到它。
-        $hostSnapshot = Join-Path $projectsRoot '2026-023-HistoryVulcan\z-Publish'
+        $hostSnapshot = Get-VulcanHostRoot
         $env:HISTORYVULCAN_PACKAGE_ROOT = $hostSnapshot
         $buildArguments += @('-HistoryVulcanPackageRoot', $hostSnapshot)
     }
     Invoke-Checked 'powershell.exe' $buildArguments $projectRoot 'Build candidate package'
-    Assert-ModuleSnapshot $candidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+    Assert-ModuleSnapshot $stagedCandidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
 
     if ($definition.Kind -eq 'module') {
         # 强制对齐：模块合同由 Diana 这一份执行，且不经注册表配置——
@@ -660,13 +530,15 @@ try {
         throw "Unsupported publish kind: $($definition.Kind)"
     }
 
-    Merge-PackageDocumentsIntoSnapshot $documentSourceRoot $candidateRoot
+    Merge-PackageDocumentsIntoSnapshot $documentSourceRoot $stagedCandidateRoot
+    Assert-ModuleSnapshot $stagedCandidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+    $candidateRoot = Publish-VersionedCandidate $stagedCandidateRoot $publishRoot $Module $moduleVersion
     Assert-ModuleSnapshot $candidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
 
     if (-not $Publish) {
         if ($SourceWorktree) {
-            Write-Host "Worktree candidate z-Publish is ready: $candidateRoot"
-            Write-Host 'Vulcan runtime scans only AppData; diana.release.cycle will trial-load this verified root candidate.'
+            Write-Host "Worktree versioned candidate is ready: $candidateRoot"
+            Write-Host 'diana.release.cycle will strictly replace the AppData runtime package with this candidate.'
             return
         }
 
@@ -674,13 +546,12 @@ try {
         Write-Host 'Pass -Publish to run the release cycle; Vulcan installation is performed by the host command path.'
         return
     }
-    Assert-ModuleSnapshot $candidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
     Write-Host "Published candidate $Module ${moduleVersion}: $candidateRoot"
     Write-Host "Published documents: $(Join-Path $candidateRoot 'docs')"
     if ($definition.Kind -eq 'host' -and $Module -eq 'HistoryVulcan') {
         Repair-VulcanAutostart $candidateRoot
     }
-    Write-Host "Deploy-then-commit: 提交 $projectRoot 的源码与 z-Publish 根候选；运行时安装由 vulcan.module.install 完成。"
+    Write-Host "Deploy-then-commit: 提交 $projectRoot 的源码与 z-Publish 根候选；运行区热重载由 diana.release.cycle 调用 vulcan.module.install 完成。"
 }
 finally {
     if (Test-Path -LiteralPath $workRoot) {

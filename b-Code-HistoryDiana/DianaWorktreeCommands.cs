@@ -198,7 +198,8 @@ internal static class DianaWorktreeCommands
             if (!File.Exists(Path.Combine(worktreePath, "Directory.Build.props")))
                 return "（项目没有 Directory.Build.props，未写本机覆盖点）";
 
-            var hostRoot = Path.Combine(DianaLibraryRoot.Resolve(settings), "2026-023-HistoryVulcan", "z-Publish");
+            var hostProject = Path.Combine(DianaLibraryRoot.Resolve(settings), "2026-023-HistoryVulcan");
+            var hostRoot = DianaPublishPackages.ResolveHostSnapshot(hostProject);
             var content = $"""
                 <Project>
                   <!-- 由 diana.worktree.create 生成：把宿主快照指回来源库根。不入库。 -->
@@ -284,9 +285,6 @@ internal static class DianaWorktreeCommands
                 + "Diana 住在该进程里，不能自己停自己。先停止正式 HistoryVulcan.exe，再 diana.worktree.merge，合并后启动新 EXE（后台加 --service）。");
         }
 
-        var released = await DianaTrialCommands.ReleaseForWorktreeAsync(
-            host, moduleName, worktreePath, cancellation).ConfigureAwait(false);
-
         var (ffOutput, ffError) = Git(projectPath, "merge", "--ff-only", branch);
         string mergeNote;
         if (ffError == null)
@@ -310,18 +308,22 @@ internal static class DianaWorktreeCommands
         string reloadNote;
         if (resolved && module.Kind.Equals("host", StringComparison.OrdinalIgnoreCase))
         {
-            reloadNote = "宿主 EXE 不随 vulcan.module.reload 替换；新快照在下次启动正式 HistoryVulcan.exe 时生效。";
+            reloadNote = "宿主 EXE 不随模块热重载替换；新快照在下次启动正式 HistoryVulcan.exe 时生效。";
+        }
+        else if (resolved)
+        {
+            var reload = await DianaHotReload.InstallCurrentAsync(
+                host, projectPath, moduleName!, "host:diana.worktree.merge", cancellation).ConfigureAwait(false);
+            reloadNote = reload.Success
+                ? "已把合并后的版本化候选热重载到 Vulcan 运行区"
+                : $"合并后热重载未成功（{reload.Message}），请从候选或 history 再调同一热重载接口";
         }
         else
         {
-            var reload = await host.Bus.ExecuteAsync("vulcan.module.reload", "diana.worktree.merge")
-                .ConfigureAwait(false);
-            reloadNote = reload.Success
-                ? "已 vulcan.module.reload 装入合并后的正式 z"
-                : $"合并后热重载未成功（{reload.Message}），请手工 vulcan.module.reload";
+            reloadNote = "该项目不是已登记模块，不变更 Vulcan 运行区。";
         }
 
-        var text = new StringBuilder($"{mergeNote}。\n{released.Message}\n{removed.Message}\n{reloadNote}");
+        var text = new StringBuilder($"{mergeNote}。\n{removed.Message}\n{reloadNote}");
         text.Append("\n工作区目录已删除。若对话根还在该路径（grok 切过根），迁到项目主树或 Diana；");
         text.Append("迁到别的仓库后立刻 git branch --show-current，若出现其他项目的 ai/... 分支，checkout main 并删掉误建分支。");
         if (!removed.Success)
@@ -501,10 +503,7 @@ internal static class DianaWorktreeCommands
         for (var attempt = 0; attempt < 8; attempt++)
         {
             if (attempt > 0)
-            {
-                DianaTrialCommands.CollectTrialAssemblies();
                 Thread.Sleep(250);
-            }
 
             try
             {
@@ -530,12 +529,21 @@ internal static class DianaWorktreeCommands
 
     private static bool IsFormalHostRunning(ISettingsService settings, out string executable)
     {
-        executable = Path.Combine(
+        var projectRoot = Path.Combine(
             DianaLibraryRoot.Resolve(settings),
-            "2026-023-HistoryVulcan",
-            "z-Publish",
-            "host",
-            "HistoryVulcan.exe");
+            "2026-023-HistoryVulcan");
+        try
+        {
+            executable = Path.Combine(
+                DianaPublishPackages.ResolveCurrent(projectRoot, "HistoryVulcan"),
+                "host",
+                "HistoryVulcan.exe");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        {
+            executable = Path.Combine(projectRoot, "z-Publish", "HistoryVulcan-vunknown", "host", "HistoryVulcan.exe");
+            return false;
+        }
         if (!File.Exists(executable))
             return false;
 
