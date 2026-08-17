@@ -170,7 +170,7 @@ internal static class DianaWorktreeCommands
         text.Append($"\n分支: {branch}（基于 {head}）");
         text.Append($"\n项目: {projectPath}");
         text.Append($"\n{overrideNote}");
-        text.Append("\n接着把对话根迁进此工作区（手册四步）。合并前先把对话根迁走，再 diana.worktree.merge。");
+        text.Append("\ngrok 按手册四步把对话根迁进此工作区；其他 AI 不要切根，按上面的路径改文件。若对话根已在工作区内，合并前先迁走再 diana.worktree.merge。");
         return CommandResult.Ok(text.ToString(), new
         {
             Name = name,
@@ -322,7 +322,7 @@ internal static class DianaWorktreeCommands
         }
 
         var text = new StringBuilder($"{mergeNote}。\n{released.Message}\n{removed.Message}\n{reloadNote}");
-        text.Append("\n工作区目录已删除。若对话根还在该路径，迁到项目主树或 Diana；");
+        text.Append("\n工作区目录已删除。若对话根还在该路径（grok 切过根），迁到项目主树或 Diana；");
         text.Append("迁到别的仓库后立刻 git branch --show-current，若出现其他项目的 ai/... 分支，checkout main 并删掉误建分支。");
         if (!removed.Success)
             return CommandResult.Fail(text.ToString());

@@ -478,7 +478,7 @@ internal static class DianaReleaseCommands
         if (!string.Equals(module.Kind, "module", StringComparison.OrdinalIgnoreCase))
         {
             text.Append("\n宿主候选不走 trial，可继续在工作区开发或 diana.worktree.merge。");
-            text.Append("\n合并前先把对话根迁出工作区。");
+            text.Append("\n若对话根已在工作区内（grok 切过根），合并前先迁出。");
             return CommandResult.Ok(text.ToString(), new
             {
                 Module = moduleName,
@@ -497,7 +497,7 @@ internal static class DianaReleaseCommands
             host, snapshot, alias: null, createUi, cancellation).ConfigureAwait(false);
         text.Append('\n').Append(trial.Success ? trial.Message : "试用未成功（提交已保留，不回滚）：" + trial.Message);
         text.Append("\n可继续在此工作区开发，或 diana.worktree.merge 并回主线。");
-        text.Append("\n合并前先把对话根迁出工作区（迁到项目主树或 Diana），再 merge；合并会删工作区目录。");
+        text.Append("\n若对话根已在工作区内（grok 切过根），合并前先迁到项目主树或 Diana 再 merge；合并会删工作区目录。其他 AI 对话不在工作区里，可直接 merge。");
         return trial.Success
             ? CommandResult.Ok(text.ToString(), new
             {
