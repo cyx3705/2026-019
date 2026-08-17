@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Module,
     [switch]$Publish,
@@ -197,7 +197,7 @@ function Assert-ModuleSnapshot {
     $rootPrefix = [IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
     $files = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object Name -ne 'SHA256SUMS')
     if ($files.Count -ne $hashes.Count) {
-        throw "SHA256SUMS does not cover the complete snapshot ($($files.Count) files vs $($hashes.Count) entries): $Root"
+        throw ('SHA256SUMS does not cover the complete snapshot ({0} files vs {1} entries): {2}' -f $files.Count, $hashes.Count, $Root)
     }
     foreach ($file in $files) {
         $key = $file.FullName.Substring($rootPrefix.Length).Replace('\', '/')
@@ -551,7 +551,7 @@ try {
     if ($definition.Kind -eq 'host' -and $Module -eq 'HistoryVulcan') {
         Repair-VulcanAutostart $candidateRoot
     }
-    Write-Host "Deploy-then-commit: 提交 $projectRoot 的源码与 z-Publish 根候选；运行区热重载由 diana.release.cycle 调用 vulcan.module.install 完成。"
+    Write-Host ('Deploy-then-commit: commit source and z-Publish candidate in {0}; runtime reload is vulcan.module.install via diana.release.cycle.' -f $projectRoot)
 }
 finally {
     if (Test-Path -LiteralPath $workRoot) {

@@ -225,7 +225,7 @@ internal static class DianaReleaseCommands
             inner.Append(" -Publish");
         if (projectRootOverride != null)
             inner.Append($" -SourceWorktree {Quote(projectRootOverride)}");
-        inner.Append("; exit $LASTEXITCODE");
+        inner.Append("; if (-not $?) { exit 1 }; if ($null -eq $LASTEXITCODE) { exit 0 }; exit $LASTEXITCODE");
 
         var command = new StringBuilder();
         command.Append("chcp 65001 | Out-Null; ");

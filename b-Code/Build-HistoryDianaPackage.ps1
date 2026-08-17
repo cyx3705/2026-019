@@ -16,8 +16,10 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
 }
 $OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
 $repoPrefix = $repoRoot.TrimEnd('\') + '\'
-if (-not $OutputRoot.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "OutputRoot must remain inside the HistoryDiana project: $OutputRoot"
+$tempPrefix = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+if (-not ($OutputRoot.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+          $OutputRoot.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase))) {
+    throw "OutputRoot must remain inside the HistoryDiana project or the process temp directory: $OutputRoot"
 }
 
 $projectPath = Join-Path $repoRoot 'b-Code-HistoryDiana\HistoryDiana.csproj'
