@@ -1,0 +1,8 @@
+# Keep broad text searches focused on current, editable HistoryDiana truth.
+b-Office-Diana/history/
+z-Publish/
+b-References/
+z-HistoryDiana/
+.vs/
+**/bin/
+**/obj/
