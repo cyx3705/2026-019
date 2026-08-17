@@ -19,7 +19,7 @@ try
     File.WriteAllText(Path.Combine(worktreeDirectory, "sample.txt"), "HistoryDiana smoke test");
 
     var channelProject = Path.Combine(temporaryRoot, "2026-020-HistoryJanus");
-    var channelPackage = Path.Combine(channelProject, "z-HistoryJanus");
+    var channelPackage = Path.Combine(channelProject, "z-Publish", "current", "HistoryJanus");
     Directory.CreateDirectory(Path.Combine(channelPackage, "docs"));
     var apiPath = Path.Combine(channelPackage, "docs", "模块API.md");
     File.WriteAllText(apiPath, "# Janus API\nintro\n## 命令\ncommand-body\n## 窗口\nwindow-body\n");
@@ -37,6 +37,13 @@ try
     var changelogHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(changelogPath)));
     File.WriteAllText(Path.Combine(channelPackage, "SHA256SUMS"),
         $"{apiHash}  docs/模块API.md{Environment.NewLine}{changelogHash}  docs/变更摘要.md{Environment.NewLine}");
+
+    // 迁移期同时存在旧正式 z；文档通道必须优先选择 z-Publish/current。
+    var legacyPackage = Path.Combine(channelProject, "z-HistoryJanus");
+    Directory.CreateDirectory(legacyPackage);
+    File.WriteAllText(Path.Combine(legacyPackage, "module.manifest.json"),
+        "{\"schemaVersion\":1,\"type\":\"HistoryVulcan.Module\",\"name\":\"HistoryJanus\",\"version\":\"1.0.0\"}");
+    File.WriteAllText(Path.Combine(legacyPackage, "SHA256SUMS"), "");
 
     var registry = new CommandRegistry();
     var log = new TestLog();
@@ -57,7 +64,7 @@ try
 
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.10.12", moduleInfos[0].Version, "模块版本");
+    Equal("1.10.13", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All()
@@ -139,6 +146,10 @@ try
     True(catalog.Success, "docs catalog 必须成功");
     True(catalog.Message.Contains("diana.docs.janus", StringComparison.Ordinal),
         "索引必须把通道命令显式写进对话文本");
+    True(catalog.Message.Contains("z-Publish/current/HistoryJanus", StringComparison.Ordinal),
+        "索引必须优先显示 z-Publish/current 文档区");
+    True(!catalog.Message.Contains("z-HistoryJanus", StringComparison.Ordinal),
+        "迁移期不得用旧 z-History 覆盖新文档区");
     True(catalog.Message.Contains("heading=", StringComparison.Ordinal),
         "索引必须提示长文用 heading= 按节读取");
     var listed = await bus.ExecuteAsync("diana.docs.janus", "smoke");
@@ -191,7 +202,7 @@ try
     SequenceEqual(new[] { "true", "false" }, loadUi!.AllowedValues!, "load ui 参数只接受 true/false");
     Equal("true", loadUi.Default, "trial.load 默认建验收界面");
 
-    var candidateRoot = Path.Combine(temporaryRoot, "candidate", "z-HistoryDiana");
+    var candidateRoot = Path.Combine(temporaryRoot, "candidate", "z-Publish", "current", "HistoryDiana");
     Directory.CreateDirectory(candidateRoot);
     File.Copy(assembly.Location, Path.Combine(candidateRoot, "HistoryDiana.dll"));
     File.WriteAllText(Path.Combine(candidateRoot, "module.manifest.json"),
@@ -208,7 +219,7 @@ try
     True(afterFailedUi.Message.Contains("当前没有试用中的候选模块", StringComparison.Ordinal),
         "ui=true 失败后不得残留试用条目");
 
-    var janusRoot = Path.Combine(temporaryRoot, "candidate", "z-HistoryJanus");
+    var janusRoot = Path.Combine(temporaryRoot, "candidate", "z-Publish", "current", "HistoryJanus");
     Directory.CreateDirectory(janusRoot);
     File.Copy(assembly.Location, Path.Combine(janusRoot, "HistoryJanus.dll"));
     File.WriteAllText(Path.Combine(janusRoot, "module.manifest.json"),
@@ -216,7 +227,7 @@ try
         {"schemaVersion":1,"type":"HistoryVulcan.Module","name":"HistoryJanus","version":"9.9.9","artifact":"HistoryJanus.dll","ui":true}
         """);
 
-    var hostSnap = Path.Combine(temporaryRoot, "candidate", "z-HistoryVulcan");
+    var hostSnap = Path.Combine(temporaryRoot, "candidate", "z-Publish", "current", "HistoryVulcan");
     Directory.CreateDirectory(hostSnap);
     File.WriteAllText(Path.Combine(hostSnap, "module.manifest.json"),
         """

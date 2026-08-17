@@ -65,11 +65,12 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 ## 部署
 
-宿主的模块发现扫描各项目根下的 `z-*` 目录，因此发布到 [`z-HistoryDiana`](./z-HistoryDiana/)
-即完成部署。模块发布不要关闭 Vulcan：宿主从内存加载 DLL，覆盖 z 后执行 `vulcan.module.reload`
+宿主的模块发现仍扫描各项目根下的正式 `z-History*` 目录，因此发布到 [`z-HistoryDiana`](./z-HistoryDiana/)
+即完成模块部署；发布文档先落在 [`z-Publish/current`](./z-Publish/current/)，Diana 文档 MCP 优先从这里读取。
+模块发布不要关闭 Vulcan：宿主从内存加载 DLL，覆盖正式 z 后执行 `vulcan.module.reload`
 （管线在正式宿主运行时会自己调）。只有替换宿主 EXE 才需要停进程。
 
-当前正式快照为 `1.10.12`。
+当前正式快照为 `1.10.12`；本轮源码版本为 `1.10.13`，待下一次 Diana cycle 正式发布。
 
 ## 集中发布
 

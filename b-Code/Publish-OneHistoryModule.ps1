@@ -19,7 +19,7 @@ $dianaRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $projectsRoot = [IO.Path]::GetFullPath((Join-Path $dianaRoot '..'))
 $transactionId = [Guid]::NewGuid().ToString('N')
 $stamp = [DateTimeOffset]::UtcNow.ToString('yyyyMMdd-HHmmss')
-$workRoot = Join-Path $dianaRoot "b-Publish\work\module-release-$transactionId"
+$workRoot = Join-Path $dianaRoot "z-Publish\work\module-release-$transactionId"
 
 # 普通 module 的定义与验证步骤由注册表提供；新增普通模块只需新增一项 JSON。
 $registryPath = Join-Path $dianaRoot 'b-Code\module-publish.manifest.json'
@@ -51,7 +51,7 @@ $definitions['HistoryVulcan'] = [ordered]@{
         SourceManifest = ''
         SnapshotManifest = 'manifest.json'
         IdentityProperty = 'product'
-        CandidateDirectory = 'b-Publish\current'
+        CandidateDirectory = 'z-Publish\current'
         FormalDirectory = 'z-HistoryVulcan'
         BuildScript = 'b-Code-HistoryVulcan\eng\Build-HistoryVulcanPackage.ps1'
         PackageDocuments = 'b-Office\package'
@@ -595,7 +595,7 @@ if ($definition.Kind -eq 'module') {
     }
 }
 
-$sourceStatus = @(& git -C $projectRoot status --porcelain -- ':!b-Publish/**' ":!$($definition.FormalDirectory)/**")
+$sourceStatus = @(& git -C $projectRoot status --porcelain -- ':!z-Publish/**' ":!$($definition.FormalDirectory)/**")
 if ($LASTEXITCODE -ne 0) { throw "Unable to read Git status: $projectRoot" }
 $sourceDirty = $sourceStatus.Count -gt 0
 if ($sourceDirty -and $RequireCleanSource -and -not $AllowDirtySource) {
@@ -688,7 +688,7 @@ try {
     if (Test-Path -LiteralPath $formalManifestPath -PathType Leaf) {
         $oldVersion = [string](([IO.File]::ReadAllText($formalManifestPath) | ConvertFrom-Json).version)
     }
-    $formalBackup = Join-Path $projectRoot "b-Publish\history\$Module\$oldVersion-$stamp-$($transactionId.Substring(0, 8))"
+    $formalBackup = Join-Path $projectRoot "z-Publish\history\$Module\$oldVersion-$stamp-$($transactionId.Substring(0, 8))"
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $formalBackup) | Out-Null
 
     $formalBackedUp = $false

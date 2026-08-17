@@ -8,7 +8,8 @@ using HistoryVulcan.Core.Storage;
 namespace HistoryDiana;
 
 /// <summary>
-/// 跨项目说明书只从各项目 <c>z-*</c> 读取。现场扫描生成通道，避免手维护清单漂移。
+/// 跨项目说明书从各项目的 z-Publish 候选发布区读取，并兼容过渡期的 z-History 快照。
+/// 现场扫描生成通道，避免手维护清单漂移。
 /// </summary>
 internal static class DianaZDocCommands
 {
@@ -49,7 +50,7 @@ internal static class DianaZDocCommands
                 Name = $"diana.docs.{captured.Id}",
                 Domain = "HistoryDiana",
                 CommandClass = "docs",
-                Summary = $"查看 {captured.Module} 正式 z 快照中的已发布 Markdown；省略 file 只列出本通道",
+                Summary = $"查看 {captured.Module} 已发布 z 快照中的 Markdown；省略 file 只列出本通道",
                 Example = captured.Documents.Count == 0
                     ? $"diana.docs.{captured.Id}"
                     : $"diana.docs.{captured.Id} file={captured.Documents[0].Path}",
@@ -351,32 +352,66 @@ internal static class DianaZDocCommands
 
         foreach (var project in projects)
         {
-            IEnumerable<string> packages;
-            try
-            {
-                packages = Directory.GetDirectories(project, "z-*");
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                continue;
-            }
-
-            foreach (var package in packages)
-                TryAddChannel(package, Path.GetFileName(project), channels);
+            foreach (var package in DiscoverPackages(project))
+                TryAddChannel(package, project, Path.GetFileName(project), channels);
         }
 
-        var duplicates = channels
-            .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
-            .Where(group => group.Count() > 1)
-            .Select(group => group.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return channels
-            .Where(item => !duplicates.Contains(item.Id))
+            .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group
+                .OrderBy(item => item.Documents.Count == 0 ? 1 : 0)
+                .ThenBy(item => item.Folder.StartsWith("z-Publish/", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(item => item.PackagePath, StringComparer.OrdinalIgnoreCase)
+                .First())
             .OrderBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
-    private static void TryAddChannel(string package, string projectDirectory, List<ZDocChannel> channels)
+    private static IEnumerable<string> DiscoverPackages(string project)
+    {
+        var publishCurrent = Path.Combine(project, "z-Publish", "current");
+        if (Directory.Exists(publishCurrent))
+        {
+            if (File.Exists(Path.Combine(publishCurrent, "SHA256SUMS")))
+                yield return publishCurrent;
+
+            IEnumerable<string> publishedPackages;
+            try
+            {
+                publishedPackages = Directory.GetDirectories(publishCurrent);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                publishedPackages = [];
+            }
+
+            foreach (var package in publishedPackages)
+            {
+                if (File.Exists(Path.Combine(package, "SHA256SUMS")))
+                    yield return package;
+            }
+        }
+
+        IEnumerable<string> legacyPackages;
+        try
+        {
+            legacyPackages = Directory.GetDirectories(project, "z-*")
+                .Where(package => !Path.GetFileName(package).Equals("z-Publish", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            legacyPackages = [];
+        }
+
+        foreach (var package in legacyPackages)
+            yield return package;
+    }
+
+    private static void TryAddChannel(
+        string package,
+        string project,
+        string projectDirectory,
+        List<ZDocChannel> channels)
     {
         var sumsPath = Path.Combine(package, "SHA256SUMS");
         if (!File.Exists(sumsPath))
@@ -417,12 +452,13 @@ internal static class DianaZDocCommands
         }
 
         var version = ReadVersion(package);
+        var relativeFolder = Path.GetRelativePath(project, package).Replace('\\', '/');
         channels.Add(new ZDocChannel(
             id,
             moduleName,
             version,
             projectDirectory,
-            Path.GetFileName(package),
+            relativeFolder,
             Path.GetFullPath(package),
             documents.OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToList()));
     }
@@ -535,7 +571,7 @@ internal static class DianaZDocCommands
     private static string RenderCatalog(IReadOnlyList<ZDocChannel> channels)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("Z 文档通道（现场扫描 SHA256SUMS，不是手维护清单）");
+        builder.AppendLine("Z 文档通道（优先扫描 z-Publish/current，兼容旧 z-History；现场读取 SHA256SUMS）");
         builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用其中一个 diana.docs.<通道>。省略 file 只列出该通道。");
         builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 3.11.6），否则只返回目录。");
         builder.AppendLine("若列出了通道但命令尚未登记，执行 vulcan.module.reload 让 Diana 按当前 z 重新附着。");

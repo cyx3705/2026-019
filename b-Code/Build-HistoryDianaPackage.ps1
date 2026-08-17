@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$publishRoot = Join-Path $repoRoot 'b-Publish'
+$publishRoot = Join-Path $repoRoot 'z-Publish'
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = Join-Path $publishRoot 'current\HistoryDiana'
 }

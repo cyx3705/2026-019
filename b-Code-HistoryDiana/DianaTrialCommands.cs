@@ -55,7 +55,7 @@ internal static class DianaTrialCommands
             Domain = "HistoryDiana",
             CommandClass = "trial",
             Summary = "临时注册候选：先卸同名正式模块，再把指定目录装进内存；默认建验收界面。不改发现根、不写正式槽或 AppData",
-            Example = @"diana.trial.load path=F:\ai工作区\2026-024-HistoryMinerva\<工作区>\z-HistoryMinerva",
+            Example = @"diana.trial.load path=F:\ai工作区\2026-024-HistoryMinerva\<工作区>\z-Publish\current\HistoryMinerva",
             Parameters =
             [
                 Text("path", "含 module.manifest.json 的目录（工作区 z-* 或候选目录均可）", required: true, position: 0),

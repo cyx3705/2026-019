@@ -15,7 +15,7 @@
       "documentation"
     ],
     "status": "active",
-    "version": "1.10.12",
+    "version": "1.10.13",
     "branch": "main"
   },
   "paths": {
@@ -32,11 +32,11 @@
     "generatedRoots": [
       "b-Code-HistoryDiana/bin",
       "b-Code-HistoryDiana/obj",
-      "b-Publish/current"
+      "z-Publish/current"
     ],
     "archiveRoots": [
       "b-Office-Diana/history",
-      "b-Publish"
+      "z-Publish"
     ],
     "releaseRoots": [
       "z-HistoryDiana"
@@ -98,7 +98,7 @@
   ],
   "contextExclusions": [
     "b-Office-Diana/history/**",
-    "b-Publish/**",
+    "z-Publish/**",
     "z-HistoryDiana/**",
     "b-References/**",
     "**/bin/**",
