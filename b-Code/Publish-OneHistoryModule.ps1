@@ -293,11 +293,17 @@ function Archive-PackageDirectory {
 
     $identity = Get-PackageIdentity $Package
     $archive = Join-Path $HistoryRoot "$($identity.Name)-v$($identity.Version)"
-    Assert-ArchiveSlot $Package $archive
-    if (-not (Test-Path -LiteralPath $archive -PathType Container)) {
-        Copy-PackageDirectory $Package $archive
-        Write-Host "Archived previous candidate: $archive"
+    if (Test-Path -LiteralPath $archive -PathType Container) {
+        $sourceSums = [IO.File]::ReadAllText((Join-Path $Package 'SHA256SUMS')).Replace("`r`n", "`n")
+        $destinationSums = [IO.File]::ReadAllText((Join-Path $archive 'SHA256SUMS')).Replace("`r`n", "`n")
+        if ($sourceSums.Equals($destinationSums, [StringComparison]::OrdinalIgnoreCase)) {
+            return $archive
+        }
+        # 同版本归档已存在且内容不同：当前候选仍必须让位给新版本，写入旁路时间戳槽。
+        $archive = Join-Path $HistoryRoot ("{0}-v{1}-{2}" -f $identity.Name, $identity.Version, (Get-Date -Format 'yyyyMMdd-HHmmss'))
     }
+    Copy-PackageDirectory $Package $archive
+    Write-Host "Archived previous candidate: $archive"
     return $archive
 }
 
@@ -409,6 +415,17 @@ function Invoke-ConfiguredModuleValidation {
                     Replace('{capturePath}', $capturePath).
                     Replace('{isolatedOutputRoot}', $isolatedOutputRoot)
             })
+            if ([string]$step.tool -eq 'dotnet.exe' -and
+                -not [string]::IsNullOrWhiteSpace($env:HISTORYVULCAN_PACKAGE_ROOT)) {
+                $hostProperty = "-p:HistoryVulcanPackageRoot=$($env:HISTORYVULCAN_PACKAGE_ROOT)"
+                $separator = [array]::IndexOf($arguments, '--')
+                if ($separator -ge 0) {
+                    $arguments = @($arguments[0..($separator - 1)]) + $hostProperty + @($arguments[$separator..($arguments.Length - 1)])
+                }
+                else {
+                    $arguments += $hostProperty
+                }
+            }
             $description = ([string]$step.description).Replace('{configuration}', $configuration)
             try {
                 Invoke-Checked ([string]$step.tool) $arguments $ProjectRoot $description
