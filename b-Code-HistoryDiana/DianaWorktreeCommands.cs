@@ -535,13 +535,15 @@ internal static class DianaWorktreeCommands
         try
         {
             executable = Path.Combine(
-                DianaPublishPackages.ResolveCurrent(projectRoot, "HistoryVulcan"),
+                DianaPublishPackages.ResolveHostSnapshot(projectRoot),
                 "host",
                 "HistoryVulcan.exe");
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or DirectoryNotFoundException)
         {
-            executable = Path.Combine(projectRoot, "z-Publish", "HistoryVulcan-vunknown", "host", "HistoryVulcan.exe");
+            // 4.0.0 keeps the formal host snapshot flat; retain a deterministic
+            // diagnostic path when the candidate is absent or malformed.
+            executable = Path.Combine(projectRoot, "z-Publish", "host", "HistoryVulcan.exe");
             return false;
         }
         if (!File.Exists(executable))

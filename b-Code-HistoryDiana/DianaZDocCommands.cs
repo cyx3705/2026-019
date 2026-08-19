@@ -537,13 +537,13 @@ internal static class DianaZDocCommands
     private static string RenderCatalog(IReadOnlyList<ZDocChannel> channels)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("Z 文档通道（只扫描各项目 z-Publish/History*-v* 当前候选，现场读取 SHA256SUMS）");
+        builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 4.0.0 宿主为平铺 host，现场读取 SHA256SUMS）");
         builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用其中一个 diana.docs.<通道>。省略 file 只列出该通道。");
-        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 3.11.6），否则只返回目录。");
+        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 4.0.0），否则只返回目录。");
         builder.AppendLine("若列出了通道但命令尚未登记，执行 vulcan.module.reload 让 Diana 按当前运行区重新附着。");
         if (channels.Count == 0)
         {
-            builder.Append("当前项目库下没有合规的 z-Publish/History*-v* 当前候选。");
+            builder.Append("当前项目库下没有合规的 z-Publish 当前候选（模块版本目录或平铺 host 宿主）。");
             return builder.ToString();
         }
 

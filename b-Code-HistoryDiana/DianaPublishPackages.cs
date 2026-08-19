@@ -13,8 +13,16 @@ internal static class DianaPublishPackages
 
     internal static string ResolveCurrent(string projectRoot, string expectedName)
     {
+        if (expectedName.Equals("HistoryVulcan", StringComparison.OrdinalIgnoreCase))
+            return ResolveHostSnapshot(projectRoot);
+
+        return ResolveVersionedCurrent(projectRoot, expectedName);
+    }
+
+    private static string ResolveVersionedCurrent(string projectRoot, string expectedName)
+    {
         var publishRoot = Path.Combine(projectRoot, PublishDirectoryName);
-        var packages = EnumerateCurrent(publishRoot)
+        var packages = EnumerateVersioned(publishRoot)
             .Where(package => package.Name.Equals(expectedName, StringComparison.OrdinalIgnoreCase))
             .ToList();
         return packages.Count switch
@@ -29,21 +37,52 @@ internal static class DianaPublishPackages
 
     internal static string ResolveHostSnapshot(string vulcanProjectRoot)
     {
-        try
+        var publishRoot = Path.Combine(vulcanProjectRoot, PublishDirectoryName);
+        // Vulcan 4.0.0 keeps the current host payload flat at z-Publish/host.
+        // Prefer it over any migration-era HistoryVulcan-v* directory so a
+        // stale archive can never become the compile-time dependency.
+        if (TryReadFlatHost(publishRoot, out _))
         {
-            return ResolveCurrent(vulcanProjectRoot, "HistoryVulcan");
+            return Path.GetFullPath(publishRoot);
         }
-        catch (Exception ex) when (ex is DirectoryNotFoundException or InvalidOperationException)
+
+        var flatShapePresent = Directory.Exists(Path.Combine(publishRoot, "host"))
+            || File.Exists(Path.Combine(publishRoot, "manifest.json"))
+            || File.Exists(Path.Combine(publishRoot, "SHA256SUMS"));
+        if (flatShapePresent)
         {
-            var publishRoot = Path.Combine(vulcanProjectRoot, PublishDirectoryName);
-            var hostExe = Path.Combine(publishRoot, "host", "HistoryVulcan.exe");
-            if (File.Exists(hostExe) && File.Exists(Path.Combine(publishRoot, "SHA256SUMS")))
-                return Path.GetFullPath(publishRoot);
-            throw;
+            throw new InvalidOperationException(
+                $"HistoryVulcan flat host snapshot is incomplete or invalid: {publishRoot}");
         }
+
+        // Keep the versioned resolver only as a migration fallback. New 4.0.0
+        // publishes never create this shape at the current z-Publish root.
+        return ResolveVersionedCurrent(vulcanProjectRoot, "HistoryVulcan");
     }
 
     internal static IReadOnlyList<PublishedPackage> EnumerateCurrent(string publishRoot)
+    {
+        if (!Directory.Exists(publishRoot))
+            return [];
+
+        var result = new List<PublishedPackage>();
+        var hasFlatHost = TryReadFlatHost(publishRoot, out var flatHost);
+        if (hasFlatHost)
+            result.Add(flatHost);
+
+        // Once the 4.0.0 flat host exists, a migration-era HistoryVulcan-v*
+        // directory at the same level is stale and must not become a second
+        // current documentation channel. It belongs under history/.
+        result.AddRange(EnumerateVersioned(publishRoot)
+            .Where(package => !hasFlatHost
+                || !package.Name.Equals("HistoryVulcan", StringComparison.OrdinalIgnoreCase)));
+        return result
+            .OrderBy(package => package.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(package => package.Version, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<PublishedPackage> EnumerateVersioned(string publishRoot)
     {
         if (!Directory.Exists(publishRoot))
             return [];
@@ -59,6 +98,44 @@ internal static class DianaPublishPackages
             .OrderBy(package => package.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(package => package.Version, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static bool TryReadFlatHost(string publishRoot, out PublishedPackage package)
+    {
+        package = default!;
+        var manifestPath = Path.Combine(publishRoot, "manifest.json");
+        var sumsPath = Path.Combine(publishRoot, "SHA256SUMS");
+        var hostExecutable = Path.Combine(publishRoot, "host", "HistoryVulcan.exe");
+        if (!File.Exists(manifestPath) || !File.Exists(sumsPath) || !File.Exists(hostExecutable))
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var root = document.RootElement;
+            if (!root.TryGetProperty("product", out var product)
+                || !root.TryGetProperty("version", out var version)
+                || product.GetString()?.Equals("HistoryVulcan", StringComparison.OrdinalIgnoreCase) != true
+                || version.GetString() is not { Length: > 0 } versionValue)
+            {
+                return false;
+            }
+
+            package = new PublishedPackage(
+                "HistoryVulcan",
+                versionValue,
+                Path.GetFullPath(publishRoot),
+                Path.GetFullPath(manifestPath));
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 
     internal static bool TryRead(string path, out PublishedPackage package)

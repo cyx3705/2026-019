@@ -57,7 +57,9 @@
             "-ExecutionPolicy",
             "Bypass",
             "-File",
-            "b-Code-Studio\\eng\\Test-QualityGate.ps1"
+            "b-Code-Studio\\eng\\Test-QualityGate.ps1",
+            "-CandidateRoot",
+            "{candidateRoot}"
           ],
           "description": "Run module quality gate"
         },
@@ -92,7 +94,9 @@
             "{configuration}",
             "--no-build",
             "--no-restore",
-            "--"
+            "--",
+            "--candidate-root",
+            "{candidateRoot}"
           ],
           "description": "Run module Smoke ({configuration})"
         },

@@ -66,18 +66,25 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 ## 部署
 
-宿主只扫描 `%AppData%\HistoryVulcan\Modules`。发布器先在项目 [`z-Publish`](./z-Publish/)
-生成并验证版本化候选 `HistoryX-vX.Y.Z/`，再由 `diana.release.cycle` / `diana.trial.load`
-调用本机 `vulcan.module.install` 热重载（与模块页「热重载」同一接口）；Diana 文档 MCP
-只读取该候选中的 `docs/`。`vulcan.module.reload` 只重扫运行区，不再扫描项目目录。
-（管线在正式宿主运行时会自己调）。只有替换宿主 EXE 才需要停进程。
+宿主只扫描 `%AppData%\HistoryVulcan\Modules`。普通模块的发布器候选仍是项目
+[`z-Publish`](./z-Publish/) 下的版本化目录 `HistoryX-vX.Y.Z/`，再由
+`diana.release.cycle` / `diana.trial.load` 调用本机 `vulcan.module.install` 热重载
+（与模块页「热重载」同一接口）。Vulcan 4.0.0 宿主候选是特例：当前快照直接平铺为
+`z-Publish/host/`，并在同一根下放 `manifest.json`、`SHA256SUMS` 与 `docs/`；旧版化
+宿主目录只允许进入 `z-Publish/history/`。Diana 文档 MCP 只读取候选中的 `docs/`。
+`vulcan.module.reload` 只重扫运行区，不再扫描项目目录。（管线在正式宿主运行时会自己调。）
+只有替换宿主 EXE 才需要停进程。
 
-当前源码版本为 `1.10.16`；运行区版本以 Vulcan 返回的模块 revision 为准。
+当前源码版本为 `1.10.17`；运行区版本以 Vulcan 返回的模块 revision 为准。
 
 ## 集中发布
 
 已登记 `HistoryDiana`、`HistoryJanus`、`HistoryMercury`、`HistoryMinerva`（Kind=module）；
-`HistoryVulcan` 是发布器内置的 Kind=host 特例。普通模块的登记和验证步骤位于
+`HistoryVulcan` 是发布器内置的 Kind=host 特例。`HistoryAurora` 当前不登记：它是独立应用，
+现有构建脚本只接受 `-Configuration`、不接受统一的 `-OutputRoot`，且仍写入自己的版本化
+发布目录；在应用/模块契约和构建入口对齐前，不把它伪装成模块接入管线。升级协调顺序是先刷新
+Vulcan 4.0.0 平铺宿主快照，再按 Aurora 自己的门禁验证。
+普通模块的登记和验证步骤位于
 [`b-Code/module-publish.manifest.json`](./b-Code/module-publish.manifest.json)，共用同一条管线；
 Vulcan 保留宿主快照与门禁特例。候选构建的调用形状统一为
 `-Configuration Release -OutputRoot <候选目录>`。

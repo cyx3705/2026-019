@@ -53,7 +53,7 @@ try
         .ToList();
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
-    Equal("1.10.16", moduleInfos[0].Version, "模块版本");
+    Equal("1.10.17", moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
     var descriptors = registry.All().OrderBy(item => item.Name, StringComparer.Ordinal).ToList();
@@ -110,6 +110,32 @@ try
     True(summary.Data is not null && recent.Data is not null && largest.Data is not null, "项目巡检返回结构化结果");
     True(!(await bus.ExecuteAsync($"diana.project.manifest name={projectName}", "smoke")).Success,
         "缺 manifest 的项目必须明确失败");
+
+    // Keep the flat host fixture out of the initial command registration scan;
+    // resolver coverage remains independent from dynamic docs channels.
+    var flatHostProject = Path.Combine(temporaryRoot, "2026-023-HistoryVulcan");
+    var flatHostRoot = Path.Combine(flatHostProject, "z-Publish");
+    var flatHostExecutable = Path.Combine(flatHostRoot, "host", "HistoryVulcan.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(flatHostExecutable)!);
+    File.WriteAllText(flatHostExecutable, "flat host smoke fixture");
+    File.WriteAllText(Path.Combine(flatHostRoot, "manifest.json"),
+        "{\"schemaVersion\":1,\"product\":\"HistoryVulcan\",\"version\":\"4.0.0\"}");
+    File.WriteAllText(Path.Combine(flatHostRoot, "SHA256SUMS"),
+        $"{Hash(flatHostExecutable)}  host/HistoryVulcan.exe{Environment.NewLine}");
+    var staleHostRoot = Path.Combine(flatHostRoot, "HistoryVulcan-v3.13.0");
+    Directory.CreateDirectory(Path.Combine(staleHostRoot, "host"));
+    File.WriteAllText(Path.Combine(staleHostRoot, "manifest.json"),
+        "{\"schemaVersion\":1,\"product\":\"HistoryVulcan\",\"version\":\"3.13.0\"}");
+    File.WriteAllText(Path.Combine(staleHostRoot, "SHA256SUMS"), "");
+    Equal(Path.GetFullPath(flatHostRoot), DianaPublishPackages.ResolveHostSnapshot(flatHostProject),
+        "Vulcan 4.0.0 必须优先解析平铺 host 快照");
+    var flatHostPackages = DianaPublishPackages.EnumerateCurrent(flatHostRoot);
+    True(flatHostPackages.Any(package =>
+            package.Name == "HistoryVulcan" && package.Version == "4.0.0"),
+        "z 文档/发布解析必须识别平铺 host 快照");
+    True(flatHostPackages.Count(package =>
+            package.Name.Equals("HistoryVulcan", StringComparison.OrdinalIgnoreCase)) == 1,
+        "平铺 host 存在时直属旧版化宿主不得冒充当前候选");
 
     var catalog = await bus.ExecuteAsync("diana.docs.catalog", "smoke");
     True(catalog.Success && catalog.Message.Contains("diana.docs.janus", StringComparison.Ordinal),

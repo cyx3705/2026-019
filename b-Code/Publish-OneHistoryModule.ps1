@@ -92,21 +92,46 @@ function Get-VulcanHostRoot {
     if (-not (Test-Path -LiteralPath $publishRoot -PathType Container)) {
         return $null
     }
+
+    # Vulcan 4.0.0 的当前快照固定是 z-Publish/host（不是模块式的
+    # HistoryVulcan-v<version> 子目录）。优先返回平铺根，避免旧迁移包
+    # 抢在当前宿主前被模块构建选中。
+    $flatManifest = Join-Path $publishRoot 'manifest.json'
+    $flatSums = Join-Path $publishRoot 'SHA256SUMS'
+    $flatHost = Join-Path $publishRoot 'host\HistoryVulcan.exe'
+    if ((Test-Path -LiteralPath $flatManifest -PathType Leaf) -and
+        (Test-Path -LiteralPath $flatSums -PathType Leaf) -and
+        (Test-Path -LiteralPath $flatHost -PathType Leaf)) {
+        try {
+            $identity = Get-PackageIdentity $publishRoot
+            if ($identity.Name -ne 'HistoryVulcan') {
+                throw "宿主快照 manifest product 不是 HistoryVulcan: $($identity.Name)"
+            }
+            return Assert-ChildPath $publishRoot $projectsRoot 'Vulcan flat host snapshot'
+        }
+        catch {
+            throw "HistoryVulcan flat host snapshot is invalid: $($_.Exception.Message)"
+        }
+    }
+
+    $flatShapePresent = (Test-Path -LiteralPath $flatManifest -PathType Leaf) -or
+        (Test-Path -LiteralPath $flatSums -PathType Leaf) -or
+        (Test-Path -LiteralPath (Join-Path $publishRoot 'host') -PathType Container)
+    if ($flatShapePresent) {
+        throw "HistoryVulcan flat host snapshot is incomplete or invalid: $publishRoot"
+    }
+
+    # 仅为 4.0 迁移窗口保留旧版化候选兼容；新宿主候选不得再走这条路径。
     $packages = @(Get-ChildItem -LiteralPath $publishRoot -Directory -Filter 'HistoryVulcan-v*' |
         Where-Object {
             (Test-Path -LiteralPath (Join-Path $_.FullName 'manifest.json') -PathType Leaf) -and
-            (Test-Path -LiteralPath (Join-Path $_.FullName 'SHA256SUMS') -PathType Leaf)
+            (Test-Path -LiteralPath (Join-Path $_.FullName 'SHA256SUMS') -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $_.FullName 'host\HistoryVulcan.exe') -PathType Leaf)
         })
     if ($packages.Count -eq 1) {
         return Assert-ChildPath $packages[0].FullName $projectsRoot 'Vulcan host snapshot'
     }
-    # 迁移窗口兼容旧的根部平铺候选；新发布完成后该分支自然退出。
-    if ($packages.Count -eq 0 -and
-        (Test-Path -LiteralPath (Join-Path $publishRoot 'manifest.json') -PathType Leaf) -and
-        (Test-Path -LiteralPath (Join-Path $publishRoot 'SHA256SUMS') -PathType Leaf)) {
-        return Assert-ChildPath $publishRoot $projectsRoot 'Legacy Vulcan host snapshot'
-    }
-    throw "HistoryVulcan z-Publish must contain exactly one HistoryVulcan-v<version> candidate: $publishRoot"
+    throw "HistoryVulcan z-Publish has no valid flat host snapshot or migration candidate: $publishRoot"
 }
 
 function Assert-ChildPath {
@@ -195,7 +220,12 @@ function Assert-ModuleSnapshot {
 
     # Janus and host snapshots have nested directories; flat modules produce the same relative keys as file names.
     $rootPrefix = [IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
-    $files = @(Get-ChildItem -LiteralPath $Root -File -Recurse | Where-Object Name -ne 'SHA256SUMS')
+    $historyPrefix = [IO.Path]::GetFullPath((Join-Path $Root 'history')).TrimEnd('\') + '\'
+    $files = @(Get-ChildItem -LiteralPath $Root -File -Recurse |
+        Where-Object {
+            $_.Name -ne 'SHA256SUMS' -and
+            -not ($Kind -eq 'host' -and $_.FullName.StartsWith($historyPrefix, [StringComparison]::OrdinalIgnoreCase))
+        })
     if ($files.Count -ne $hashes.Count) {
         throw ('SHA256SUMS does not cover the complete snapshot ({0} files vs {1} entries): {2}' -f $files.Count, $hashes.Count, $Root)
     }
@@ -358,6 +388,83 @@ function Publish-VersionedCandidate {
     return $destination
 }
 
+function Publish-FlatHostCandidate {
+    param(
+        [Parameter(Mandatory = $true)][string]$Stage,
+        [Parameter(Mandatory = $true)][string]$PublishRoot,
+        [Parameter(Mandatory = $true)][string]$ExpectedName,
+        [Parameter(Mandatory = $true)][string]$ExpectedVersion
+    )
+
+    # HistoryVulcan 4.0.0 is a host snapshot, not a module package: the current
+    # payload remains directly under z-Publish and only immutable copies go below
+    # history/. Keep all validation on a staged copy before touching that root.
+    $historyRoot = Join-Path $PublishRoot 'history'
+    $incoming = Join-Path $workRoot ".host-incoming-$transactionId"
+    $backup = Join-Path $workRoot ".host-previous-$transactionId"
+    $current = Join-Path $workRoot ".host-current-$transactionId"
+    New-Item -ItemType Directory -Force -Path $historyRoot, $incoming, $backup | Out-Null
+    Copy-PackageDirectory $Stage $incoming
+    Assert-ModuleSnapshot $incoming $ExpectedName $ExpectedVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+
+    # Preserve a flat current payload, if present, before replacing it. This also
+    # turns a legacy versioned host candidate into a normal history entry.
+    $currentManifest = Join-Path $PublishRoot $definition.SnapshotManifest
+    $currentSums = Join-Path $PublishRoot 'SHA256SUMS'
+    if ((Test-Path -LiteralPath $currentManifest -PathType Leaf) -and
+        (Test-Path -LiteralPath $currentSums -PathType Leaf)) {
+        New-Item -ItemType Directory -Force -Path $current | Out-Null
+        foreach ($item in Get-ChildItem -LiteralPath $PublishRoot -Force) {
+            if ($item.Name -eq 'history' -or $item.Name -like '.incoming-*' -or
+                $item.Name -like 'HistoryVulcan-v*') { continue }
+            Copy-Item -LiteralPath $item.FullName -Destination $current -Recurse -Force
+        }
+        $currentIdentity = Get-PackageIdentity $current
+        Assert-ModuleSnapshot $current $currentIdentity.Name $currentIdentity.Version $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+        Archive-PackageDirectory $current $historyRoot | Out-Null
+    }
+
+    # A prior failed migration may have left a versioned host directory. Archive
+    # it before removing it, so the new root cannot silently select the wrong shape.
+    foreach ($legacy in @(Get-ChildItem -LiteralPath $PublishRoot -Directory -Filter 'HistoryVulcan-v*')) {
+        $legacyIdentity = Get-PackageIdentity $legacy.FullName
+        Assert-ModuleSnapshot $legacy.FullName $legacyIdentity.Name $legacyIdentity.Version $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+        Archive-PackageDirectory $legacy.FullName $historyRoot | Out-Null
+    }
+
+    $movedExisting = [Collections.Generic.List[string]]::new()
+    $movedIncoming = [Collections.Generic.List[string]]::new()
+    try {
+        foreach ($item in @(Get-ChildItem -LiteralPath $PublishRoot -Force |
+                Where-Object { $_.Name -ne 'history' })) {
+            Move-Item -LiteralPath $item.FullName -Destination $backup -Force
+            $movedExisting.Add($item.Name)
+        }
+        foreach ($item in @(Get-ChildItem -LiteralPath $incoming -Force)) {
+            Move-Item -LiteralPath $item.FullName -Destination $PublishRoot -Force
+            $movedIncoming.Add($item.Name)
+        }
+        Assert-ModuleSnapshot $PublishRoot $ExpectedName $ExpectedVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
+    }
+    catch {
+        foreach ($name in $movedIncoming) {
+            $path = Join-Path $PublishRoot $name
+            if (Test-Path -LiteralPath $path) {
+                Remove-Item -LiteralPath $path -Recurse -Force
+            }
+        }
+        foreach ($name in $movedExisting) {
+            $path = Join-Path $backup $name
+            if (Test-Path -LiteralPath $path) {
+                Move-Item -LiteralPath $path -Destination $PublishRoot -Force
+            }
+        }
+        throw
+    }
+
+    return [IO.Path]::GetFullPath($PublishRoot)
+}
+
 function Merge-PackageDocumentsIntoSnapshot {
     param(
         [Parameter(Mandatory = $true)][string]$SourceRoot,
@@ -383,7 +490,8 @@ function Merge-PackageDocumentsIntoSnapshot {
 function Invoke-ConfiguredModuleValidation {
     param(
         [Parameter(Mandatory = $true)][object[]]$Steps,
-        [Parameter(Mandatory = $true)][string]$ProjectRoot
+        [Parameter(Mandatory = $true)][string]$ProjectRoot,
+        [Parameter(Mandatory = $true)][string]$CandidateRoot
     )
 
     foreach ($step in $Steps) {
@@ -413,7 +521,8 @@ function Invoke-ConfiguredModuleValidation {
                 ([string]$_).Replace('{configuration}', $configuration).
                     Replace('{moduleOutput}', $moduleOutput).
                     Replace('{capturePath}', $capturePath).
-                    Replace('{isolatedOutputRoot}', $isolatedOutputRoot)
+                    Replace('{isolatedOutputRoot}', $isolatedOutputRoot).
+                    Replace('{candidateRoot}', $CandidateRoot)
             })
             if ([string]$step.tool -eq 'dotnet.exe' -and
                 -not [string]::IsNullOrWhiteSpace($env:HISTORYVULCAN_PACKAGE_ROOT)) {
@@ -508,12 +617,14 @@ try {
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $projectRoot $definition.BuildScript),
         '-Configuration', 'Release', '-OutputRoot', $stagedCandidateRoot
     )
-    $hostSnapshot = Get-VulcanHostRoot
-    if ([string]::IsNullOrWhiteSpace($hostSnapshot)) {
-        throw 'HistoryVulcan host snapshot is missing under 2026-023-HistoryVulcan/z-Publish'
+    if ($definition.Kind -eq 'module') {
+        $hostSnapshot = Get-VulcanHostRoot
+        if ([string]::IsNullOrWhiteSpace($hostSnapshot)) {
+            throw 'HistoryVulcan host snapshot is missing under 2026-023-HistoryVulcan/z-Publish'
+        }
+        $env:HISTORYVULCAN_PACKAGE_ROOT = $hostSnapshot
+        $buildArguments += @('-HistoryVulcanPackageRoot', $hostSnapshot)
     }
-    $env:HISTORYVULCAN_PACKAGE_ROOT = $hostSnapshot
-    $buildArguments += @('-HistoryVulcanPackageRoot', $hostSnapshot)
     Invoke-Checked 'powershell.exe' $buildArguments $projectRoot 'Build candidate package'
     Assert-ModuleSnapshot $stagedCandidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
 
@@ -525,7 +636,7 @@ try {
             (Join-Path $PSScriptRoot 'OneHistory.ModuleContract.ps1'),
             '-ProjectRoot', $projectRoot, '-Instantiation'
         ) $projectRoot 'Run aligned module contract'
-        Invoke-ConfiguredModuleValidation @($definition.validation) $projectRoot
+        Invoke-ConfiguredModuleValidation @($definition.validation) $projectRoot $stagedCandidateRoot
     } elseif ($definition.Kind -eq 'host') {
         # 宿主合同同样由 Diana 这一份执行；宿主专属门禁（冻结标签、版本源、UI 令牌）在其中。
         Invoke-Checked 'powershell.exe' @(
@@ -549,7 +660,12 @@ try {
 
     Merge-PackageDocumentsIntoSnapshot $documentSourceRoot $stagedCandidateRoot
     Assert-ModuleSnapshot $stagedCandidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
-    $candidateRoot = Publish-VersionedCandidate $stagedCandidateRoot $publishRoot $Module $moduleVersion
+    $candidateRoot = if ($definition.Kind -eq 'host') {
+        Publish-FlatHostCandidate $stagedCandidateRoot $publishRoot $Module $moduleVersion
+    }
+    else {
+        Publish-VersionedCandidate $stagedCandidateRoot $publishRoot $Module $moduleVersion
+    }
     Assert-ModuleSnapshot $candidateRoot $Module $moduleVersion $definition.SnapshotManifest $definition.IdentityProperty $definition.Kind
 
     if (-not $Publish) {
