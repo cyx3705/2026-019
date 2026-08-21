@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>HistoryDiana</name>
+    </assembly>
+    <members>
+        <member name="T:HistoryDiana.DianaKitCommands">
+            <summary>
+            小工具集：哈希、编码、标识与时间。都是无副作用的一行计算，合并为一个 <c>kit</c> 类
+            而不是按 text / identity / time 各开一个只有一两条命令的类。
+            </summary>
+        </member>
+        <member name="T:HistoryDiana.DianaProjectAlignmentCommands">
+            <summary>Provides read-only project manifest, current-document, and cross-project alignment views.</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaRelayCommands">
+            <summary>
+            MCP 工具中继：按 OneHistory 当前的 MCP 策略实时列举、查看和调用工具。
+            </summary>
+            <remarks>
+            存在的理由是快照过期问题——AI 会话持有的工具目录是任务开始时的旧快照，
+            模块热重载后就与实际可见工具不一致。这里每次都现查现调，绕开那份旧快照。
+            </remarks>
+        </member>
+        <member name="T:HistoryDiana.DianaZDocCommands">
+            <summary>
+            跨项目说明书只从各项目 z-Publish 根候选读取，避免把历史包或旧发布区当成当前真值。
+            现场扫描生成通道，避免手维护清单漂移。
+            </summary>
+        </member>
+        <member name="T:HistoryDiana.HistoryDianaCommands">
+            <summary>Registers the HistoryDiana read-only worktree inspection commands.</summary>
+        </member>
+        <member name="M:HistoryDiana.HistoryDianaCommands.Attach(HistoryVulcan.Core.Modules.IModuleContext)">
+            <summary>Attaches the host-owned settings store and stages all module commands.</summary>
+        </member>
+        <member name="M:HistoryDiana.OhsmcpClient.TryReadModuleNames(System.Text.Json.JsonElement,System.Collections.Generic.IReadOnlySet{System.String}@)">
+            <summary>
+            从 command_list 的行数组提取模块工具名。structuredContent 优先路径与
+            content 回退路径共用本函数,确保两条路径解析逻辑不漂移。
+            </summary>
+        </member>
+    </members>
+</doc>
