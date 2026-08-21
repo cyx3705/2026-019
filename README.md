@@ -75,7 +75,7 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 `vulcan.module.reload` 只重扫运行区，不再扫描项目目录。（管线在正式宿主运行时会自己调。）
 只有替换宿主 EXE 才需要停进程。
 
-当前源码版本为 `1.10.18`；运行区版本以 Vulcan 返回的模块 revision 为准。
+当前源码版本为 `1.10.19`；运行区版本以 Vulcan 返回的模块 revision 为准。
 
 ## 集中发布
 
