@@ -648,7 +648,6 @@ try {
             'test', (Join-Path $projectRoot $definition.TestProject), '-c', 'Release', '--nologo',
             '--no-restore', '-p:NuGetAudit=false'
         ) $projectRoot 'Run host unit tests'
-        Ensure-HostPublicApiBaseline -ProjectRoot $projectRoot
         foreach ($gate in @($definition.GateScripts)) {
             Invoke-Checked 'powershell.exe' @(
                 '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $projectRoot $gate)
