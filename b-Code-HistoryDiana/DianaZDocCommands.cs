@@ -1,9 +1,11 @@
-using System.IO;
+﻿using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Storage;
+
+using HistoryVulcan.Services.Development;
 
 namespace HistoryDiana;
 
@@ -334,7 +336,7 @@ internal static class DianaZDocCommands
 
     private static IReadOnlyList<ZDocChannel> Discover(ISettingsService settings)
     {
-        var rootValue = DianaLibraryRoot.Resolve(settings);
+        var rootValue = ProjectLibraryRoot.Resolve(settings);
         if (!Directory.Exists(rootValue))
             return [];
 
@@ -369,7 +371,7 @@ internal static class DianaZDocCommands
     private static IEnumerable<string> DiscoverPackages(string project)
     {
         var publishRoot = Path.Combine(project, "z-Publish");
-        foreach (var package in DianaPublishPackages.EnumerateCurrent(publishRoot))
+        foreach (var package in PublishPackages.EnumerateCurrent(publishRoot))
             yield return package.Path;
     }
 

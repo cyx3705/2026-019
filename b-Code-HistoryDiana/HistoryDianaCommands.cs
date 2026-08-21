@@ -3,6 +3,8 @@ using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Modules;
 using HistoryVulcan.Core.Storage;
 
+using HistoryVulcan.Services.Development;
+
 namespace HistoryDiana;
 
 /// <summary>Registers the HistoryDiana read-only worktree inspection commands.</summary>
@@ -40,12 +42,15 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         DianaRelayCommands.Register(registry, settings);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
         DianaZDocCommands.Register(registry, settings);
-        // 测试与部署都只调 Vulcan 热重载（vulcan.module.install），不保留并行私有加载器。
-        DianaTrialCommands.Register(registry, context);
-        // 发布管线的命令面：分离子进程 + 日志追踪，见 DianaReleaseCommands 的类型注释。
-        DianaReleaseCommands.Register(registry, context);
-        // AI 工作区：位置可配，默认 F:i工作区，见 DianaWorktreeCommands。
-        DianaWorktreeCommands.Register(registry, context);
+
+        // 模块开发路线（工作区、发布、装机）已迁往宿主（HistoryVulcan 4.6.0），
+        // 指令名从 diana.* 改为 vulcan.worktree.* / vulcan.release.*；
+        // diana.trial.load 直接退役——它只是 vulcan.module.install 的一层转发，
+        // 在宿主里那层转发没有意义。
+        //
+        // 迁走的理由是 Diana 自己：这条路线留在模块里，每一轮模块开发都依赖 Diana
+        // 装载成功，而 Diana 也要走这条路线来改自己。一旦它坏了，开发就退化成
+        // 直接改主分支救急。放在宿主，任何一个模块坏掉都能被单独修好。
 
         registry.Register(new CommandDescriptor
         {
@@ -322,7 +327,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
 
         var settings = _settings
             ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
-        var rootValue = DianaLibraryRoot.Resolve(settings);
+        var rootValue = ProjectLibraryRoot.Resolve(settings);
         if (!Directory.Exists(rootValue))
             throw new InvalidOperationException("HistoryVulcan 设置缺少有效的 proj.libraryroot；请先配置 HistoryJanus 项目库。");
 
@@ -335,7 +340,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
             throw new DirectoryNotFoundException($"项目不存在: {projectName}");
         if ((File.GetAttributes(candidate) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidOperationException($"项目根是重解析点，已拒绝: {projectName}");
-        if (!DianaLibraryRoot.IsGitProject(candidate))
+        if (!ProjectLibraryRoot.IsGitProject(candidate))
             throw new InvalidOperationException($"目录不是独立 Git 仓库: {projectName}");
 
         return candidate;

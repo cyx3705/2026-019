@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <Import Project="HistoryDianaVersion.props" />
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -24,6 +24,15 @@
   <ItemGroup>
     <Reference Include="HistoryVulcan.Core">
       <HintPath>$(HistoryVulcanHostDir)\HistoryVulcan.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!--
+      项目库根与发布包定位随开发路线迁入宿主（HistoryVulcan 4.6.0）并提为公开面。
+      Diana 的 z 文档通道与项目对齐指令消费它们，不再各留一份——
+      「z-Publish 还是别的名字」这类约定分叉起来极难发现。
+    -->
+    <Reference Include="HistoryVulcan.Services">
+      <HintPath>$(HistoryVulcanHostDir)\HistoryVulcan.Services.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
