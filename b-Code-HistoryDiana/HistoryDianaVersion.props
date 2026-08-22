@@ -1,6 +1,6 @@
 ﻿<Project>
   <PropertyGroup>
-    <HistoryDianaVersion>2.0.0</HistoryDianaVersion>
+    <HistoryDianaVersion>2.0.1</HistoryDianaVersion>
     <!-- 4.6.0 起模块开发路线与项目库/发布包约定归宿主，本模块直接消费
          HistoryVulcan.Services.Development，低于该版本的宿主不可用。 -->
     <MinimumHistoryVulcanVersion>4.6.0</MinimumHistoryVulcanVersion>

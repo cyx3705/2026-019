@@ -97,7 +97,7 @@ internal static class DianaRelayCommands
             Domain = "HistoryDiana",
             CommandClass = "relay",
             Summary = "按当前 MCP 工具目录调用一个工具，不依赖会话里的旧快照",
-            Example = "diana.relay.call name=diana_worktree_list argumentsjson={\"project\":\"2026-023-HistoryVulcan\"}",
+            Example = "diana.relay.call name=vulcan_worktree_list argumentsjson={\"project\":\"2026-023-HistoryVulcan\"}",
             Parameters =
             [
                 Text("name", "MCP 工具名", required: true, position: 0),

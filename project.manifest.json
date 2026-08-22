@@ -15,7 +15,7 @@
       "documentation"
     ],
     "status": "active",
-    "version": "1.10.19",
+    "version": "2.0.1",
     "branch": "main"
   },
   "paths": {
@@ -53,8 +53,7 @@
     "overview": "b-Office-Diana/current/项目概览.md",
     "technicalContract": "b-Office-Diana/current/技术合同.md",
     "decisions": "b-Office-Diana/current/有效决策.md",
-    "verification": "b-Office-Diana/current/验证合同.md",
-    "moduleDevelopment": "b-Office-Diana/package/模块开发手册.md"
+    "verification": "b-Office-Diana/current/验证合同.md"
   },
   "contract": {
     "requiredFiles": [
@@ -64,12 +63,7 @@
       "project.manifest.json",
       "b-Code/README.md",
       "b-Code/Test-ProjectContract.ps1",
-      "b-Code/OneHistory.ContractCore.ps1",
-      "b-Code/OneHistory.ModuleContract.ps1",
-      "b-Code/OneHistory.HostContract.ps1",
-      "b-Code/Publish-OneHistoryModule.ps1",
-      "b-Code/module-publish.manifest.json",
-      "b-Office-Diana/package/模块开发手册.md"
+      "b-Code/Build-HistoryDianaPackage.ps1"
     ],
     "linkCheckExclusions": [
       "*\\history\\*",
@@ -82,7 +76,7 @@
     "test": "dotnet run --project .\\b-Code-HistoryDiana\\tests\\HistoryDiana.Smoke\\HistoryDiana.Smoke.csproj -c Release",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code\\Test-ProjectContract.ps1 -Instantiation",
     "run": null,
-    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code\\Publish-OneHistoryModule.ps1 -Module HistoryDiana"
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File ..\\2026-023-HistoryVulcan\\b-Code-HistoryVulcan\\eng\\pipeline\\Publish-OneHistoryModule.ps1 -Module HistoryDiana"
   },
   "externalDependencies": [
     {
@@ -92,7 +86,7 @@
     },
     {
       "name": "HistoryVulcan",
-      "version": "4.0.0",
+      "version": "4.6.0",
       "purpose": "Diana 的模块 API、命令注册、MCP 投影与正式运行宿主"
     }
   ],

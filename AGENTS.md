@@ -8,9 +8,9 @@
 2. 读取根目录 `README.md` 和 `b-Office-Diana/current/项目概览.md`。
 3. 根据任务读取 `b-Office-Diana/current/技术合同.md`、`有效决策.md` 或 `验证合同.md`；涉及目录治理时
    读取 `b-Office-Diana/文档中心.md` 的“目录规范”，涉及跨项目复用时再读取
-   `b-Office-Diana/package/复用说明.md`。**开发或发布 OneHistory 模块时必须完整读取 manifest 登记的
-   `moduleDevelopment` 文档**，按其中的工作树、候选门禁、试用、主树促级与收尾顺序执行，不能从
-   零散命令自行猜测流程。跨项目说明书不要打开别的 worktree、也不要读手写文件表：
+   `b-Office-Diana/package/复用说明.md`。开发或发布 OneHistory 模块时读取宿主
+   `vulcan.worktree.*` / `vulcan.release.*` 合同（HistoryVulcan `b-Office/package/模块开发手册.md`），
+   不要从 Diana 命令面猜测流程。跨项目说明书不要打开别的 worktree、也不要读手写文件表：
    先执行 `diana.docs.catalog`，把完整输出留在本对话中，再调用其中一条 `diana.docs.<通道>`。
 4. 只进入 manifest 声明的活动目录。发现未登记目录时，先确认其级别、所有者和用途。
 
