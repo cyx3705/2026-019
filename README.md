@@ -52,10 +52,10 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 宿主只扫描 `%AppData%\HistoryVulcan\Modules`。正式更新走 `vulcan.release.cycle name=HistoryDiana`。
 
-当前源码版本为 `2.0.1`。
+当前源码版本为 `2.0.2`。
 
 ## 集中发布
 
 已登记 `HistoryDiana`、`HistoryJanus`、`HistoryMercury`、`HistoryMinerva`（Kind=module）；
-`HistoryVulcan` 是发布器内置的 Kind=host 特例。登记表位于
-[`b-Code/module-publish.manifest.json`](../2026-023-HistoryVulcan/b-Code-HistoryVulcan/eng/pipeline/module-publish.manifest.json)。
+`HistoryVulcan` 是发布器内置的 Kind=host 特例。登记表位于宿主仓
+`2026-023-HistoryVulcan/b-Code-HistoryVulcan/eng/pipeline/module-publish.manifest.json`。
