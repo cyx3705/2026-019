@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "template": {
+    "isTemplate": false,
+    "source": "0000-000-Template",
+    "strictValidationArgument": "-Instantiation"
+  },
+  "project": {
+    "id": "2026-019",
+    "name": "HistoryDiana",
+    "title": "HistoryDiana AI 工作区",
+    "kind": [
+      "software",
+      "tooling",
+      "documentation"
+    ],
+    "status": "active",
+    "version": "2.0.2",
+    "branch": "main"
+  },
+  "paths": {
+    "activeRoots": [
+      "b-Office-Diana/current",
+      "b-Office-Diana/package",
+      "b-Code",
+      "b-Code-HistoryDiana"
+    ],
+    "sourceRoots": [
+      "b-Code",
+      "b-Code-HistoryDiana"
+    ],
+    "generatedRoots": [
+      "b-Code-HistoryDiana/bin",
+      "b-Code-HistoryDiana/obj",
+      "z-Publish"
+    ],
+    "archiveRoots": [
+      "b-Office-Diana/history",
+      "z-Publish/history"
+    ],
+    "releaseRoots": [
+      "z-Publish"
+    ],
+    "allowedRootDirectoryPrefixes": [
+      "a-",
+      "b-",
+      "z-"
+    ]
+  },
+  "documents": {
+    "center": "b-Office-Diana/文档中心.md",
+    "package": "b-Office-Diana/package/复用说明.md",
+    "overview": "b-Office-Diana/current/项目概览.md",
+    "technicalContract": "b-Office-Diana/current/技术合同.md",
+    "decisions": "b-Office-Diana/current/有效决策.md",
+    "verification": "b-Office-Diana/current/验证合同.md"
+  },
+  "contract": {
+    "requiredFiles": [
+      "AGENTS.md",
+      "README.md",
+      ".ignore",
+      "project.manifest.json",
+      "b-Code/README.md",
+      "b-Code/Test-ProjectContract.ps1",
+      "b-Code/Build-HistoryDianaPackage.ps1"
+    ],
+    "linkCheckExclusions": [
+      "*\\history\\*",
+      "*-References\\*"
+    ]
+  },
+  "commands": {
+    "setup": "dotnet restore .\\b-Code-HistoryDiana\\HistoryDiana.csproj",
+    "build": "dotnet build .\\b-Code-HistoryDiana\\HistoryDiana.csproj -c Release",
+    "test": "dotnet run --project .\\b-Code-HistoryDiana\\tests\\HistoryDiana.Smoke\\HistoryDiana.Smoke.csproj -c Release",
+    "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code\\Test-ProjectContract.ps1 -Instantiation",
+    "run": null,
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File ..\\2026-023-HistoryVulcan\\b-Code-HistoryVulcan\\eng\\pipeline\\Publish-OneHistoryModule.ps1 -Module HistoryDiana"
+  },
+  "externalDependencies": [
+    {
+      "name": ".NET SDK",
+      "version": "9.0.315",
+      "purpose": "构建 net8.0-windows 目标"
+    },
+    {
+      "name": "HistoryVulcan",
+      "version": "4.6.0",
+      "purpose": "Diana 的模块 API、命令注册、MCP 投影与正式运行宿主"
+    }
+  ],
+  "contextExclusions": [
+    "b-Office-Diana/history/**",
+    "z-Publish/**",
+    "b-References/**",
+    "**/bin/**",
+    "**/obj/**",
+    "**/.vs/**"
+  ]
+}

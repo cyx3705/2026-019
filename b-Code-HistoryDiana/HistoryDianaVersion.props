@@ -1,0 +1,14 @@
+﻿<Project>
+  <PropertyGroup>
+    <HistoryDianaVersion>2.0.2</HistoryDianaVersion>
+    <!-- 4.6.0 起模块开发路线与项目库/发布包约定归宿主，本模块直接消费
+         HistoryVulcan.Services.Development，低于该版本的宿主不可用。 -->
+    <MinimumHistoryVulcanVersion>4.6.0</MinimumHistoryVulcanVersion>
+    <VersionPrefix>$(HistoryDianaVersion)</VersionPrefix>
+    <Version>$(HistoryDianaVersion)</Version>
+    <AssemblyVersion>$(HistoryDianaVersion).0</AssemblyVersion>
+    <FileVersion>$(HistoryDianaVersion).0</FileVersion>
+    <InformationalVersion>$(HistoryDianaVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>
