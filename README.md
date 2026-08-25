@@ -51,7 +51,7 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 宿主只扫描 `%AppData%\HistoryVulcan\Modules`。正式候选由宿主模块开发管线提交；本轮不执行提交、安装或热重载。
 
-当前源码版本为 `2.2.2`，适配 HistoryVulcan `5.1.2`。
+当前源码版本为 `2.2.3`，适配 HistoryVulcan `5.1.2`。
 
 ## 集中发布
 

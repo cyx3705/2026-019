@@ -165,7 +165,7 @@ internal static class DianaZDocCommands
     // converting tool arguments to the command bus. Decode them at the module
     // boundary so Unicode document names and headings remain readable.
     private static string DecodeTransportUnicode(string value)
-        => Regex.Replace(value, @"\\u([0-9a-fA-F]{4})", match =>
+        => Regex.Replace(value, @"(?:\\|/)u([0-9a-fA-F]{4})", match =>
             ((char)Convert.ToInt32(match.Groups[1].Value, 16)).ToString(),
             RegexOptions.CultureInvariant);
 
