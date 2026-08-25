@@ -14,9 +14,5 @@
       <HintPath>$(HistoryVulcanPackageRoot)\host\HistoryVulcan.Core.dll</HintPath>
       <Private>true</Private>
     </Reference>
-    <Reference Include="HistoryVulcan.Services">
-      <HintPath>$(HistoryVulcanPackageRoot)\host\HistoryVulcan.Services.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
   </ItemGroup>
 </Project>

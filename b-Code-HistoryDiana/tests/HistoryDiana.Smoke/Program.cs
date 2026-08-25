@@ -6,7 +6,6 @@ using HistoryDiana;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Modules;
-using HistoryVulcan.Core.Storage;
 
 var temporaryRoot = Path.Combine(Path.GetTempPath(), "HistoryDiana.Smoke", Guid.NewGuid().ToString("N"));
 var commandCount = 0;
@@ -17,6 +16,21 @@ try
     var worktreeDirectory = Path.Combine(temporaryRoot, projectName);
     Directory.CreateDirectory(Path.Combine(worktreeDirectory, ".git"));
     File.WriteAllText(Path.Combine(worktreeDirectory, "sample.txt"), "HistoryDiana smoke test");
+
+    var endpointPath = Path.Combine(temporaryRoot, "endpoint.json");
+    File.WriteAllText(endpointPath, "{\"port\":59095,\"accessToken\":\"smoke-token\"}");
+    var previousEndpoint = Environment.GetEnvironmentVariable("HISTORYVULCAN_ENDPOINT");
+    Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", endpointPath);
+    try
+    {
+        var endpoint = DianaRuntime.ReadMcpEndpoint();
+        Equal("http://127.0.0.1:59095/mcp", endpoint.Uri.ToString(), "MCP endpoint URI");
+        Equal("smoke-token", endpoint.AccessToken, "MCP endpoint token");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", previousEndpoint);
+    }
 
     var channelPackage = Path.Combine(
         temporaryRoot, "2026-020-HistoryJanus", "z-Publish", "HistoryJanus-v9.9.9");
@@ -39,12 +53,8 @@ try
     var registry = new CommandRegistry();
     var log = new TestLog();
     var bus = new CommandBus(registry, log);
-    var settings = new TestSettings(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["proj.libraryroot"] = temporaryRoot,
-    });
-    var context = new TestModuleContext(bus, settings, log, temporaryRoot, registry);
-    new HistoryDianaCommands().Attach(context);
+    var context = new TestModuleContext(bus, registry);
+    new HistoryDianaCommands(() => temporaryRoot).Attach(context);
 
     var assembly = typeof(HistoryDianaCommands).Assembly;
     var moduleInfos = assembly.GetTypes()
@@ -119,8 +129,8 @@ try
 
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
         "程序集不得保留 ProjectPulse 类型");
-    Equal(0, assembly.GetTypes().Count(type => type.IsPublic && !type.IsAbstract
-        && typeof(IUiModule).IsAssignableFrom(type)), "模块不得注册 UI 生命周期");
+    Equal(0, assembly.GetTypes().Count(type => type.Name.Equals("IUiModule", StringComparison.Ordinal)),
+        "模块不得声明已移除的 UI 生命周期类型");
 }
 finally
 {
@@ -149,27 +159,10 @@ static void SequenceEqual<T>(IReadOnlyList<T> expected, IReadOnlyList<T> actual,
         throw new InvalidOperationException($"{message}: expected={string.Join(',', expected)}, actual={string.Join(',', actual)}");
 }
 
-sealed class TestModuleContext(
-    CommandBus bus,
-    ISettingsService settings,
-    IShellLog log,
-    string dataDirectory,
-    CommandRegistry registry) : IModuleContext
+sealed class TestModuleContext(CommandBus bus, CommandRegistry registry) : IModuleContext
 {
     public CommandBus Bus { get; } = bus;
-    public ISettingsService Settings { get; } = settings;
-    public IShellLog Log { get; } = log;
-    public string DataDirectory { get; } = dataDirectory;
     public void RegisterCommands(Action<CommandRegistry> configure) => configure(registry);
-}
-
-sealed class TestSettings(IReadOnlyDictionary<string, string> values) : ISettingsService
-{
-    private readonly Dictionary<string, string> _values = new(values, StringComparer.OrdinalIgnoreCase);
-    public string? Get(string key) => _values.GetValueOrDefault(key);
-    public int GetInt(string key, int fallback) => int.TryParse(Get(key), out var value) ? value : fallback;
-    public void Set(string key, string value) => _values[key] = value;
-    public IReadOnlyList<KeyValuePair<string, string>> All() => _values.ToList();
 }
 
 sealed class TestLog : IShellLog

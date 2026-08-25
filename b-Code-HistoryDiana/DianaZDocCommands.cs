@@ -3,9 +3,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Storage;
-
-using HistoryVulcan.Services.Development;
 
 namespace HistoryDiana;
 
@@ -23,12 +20,12 @@ internal static class DianaZDocCommands
         ".md", ".txt",
     };
 
-    public static void Register(CommandRegistry registry, ISettingsService settings)
+    public static void Register(CommandRegistry registry, Func<string> projectLibraryRoot)
     {
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(projectLibraryRoot);
 
-        var channels = Discover(settings);
+        var channels = Discover(projectLibraryRoot);
         registry.Register(new CommandDescriptor
         {
             Name = "diana.docs.catalog",
@@ -39,7 +36,7 @@ internal static class DianaZDocCommands
             Readonly = true,
             Handler = CommandDescriptor.Sync(_ =>
             {
-                var snapshot = Discover(settings);
+                var snapshot = Discover(projectLibraryRoot);
                 return CommandResult.Ok(RenderCatalog(snapshot), snapshot);
             }),
         });
@@ -72,14 +69,14 @@ internal static class DianaZDocCommands
                     },
                 ],
                 Handler = CommandDescriptor.Sync(context => OpenChannel(
-                    settings, captured.Id, context.GetString("file"), context.GetString("heading"))),
+                    projectLibraryRoot, captured.Id, context.GetString("file"), context.GetString("heading"))),
             });
         }
     }
 
-    private static CommandResult OpenChannel(ISettingsService settings, string channelId, string? file, string? heading)
+    private static CommandResult OpenChannel(Func<string> projectLibraryRoot, string channelId, string? file, string? heading)
     {
-        var channel = Discover(settings).FirstOrDefault(item =>
+        var channel = Discover(projectLibraryRoot).FirstOrDefault(item =>
             item.Id.Equals(channelId, StringComparison.OrdinalIgnoreCase));
         if (channel == null)
             return CommandResult.Fail($"z 通道不存在或已消失: {channelId}。请先执行 diana.docs.catalog。");
@@ -334,9 +331,9 @@ internal static class DianaZDocCommands
         return builder.ToString();
     }
 
-    private static IReadOnlyList<ZDocChannel> Discover(ISettingsService settings)
+    private static IReadOnlyList<ZDocChannel> Discover(Func<string> projectLibraryRoot)
     {
-        var rootValue = ProjectLibraryRoot.Resolve(settings);
+        var rootValue = projectLibraryRoot();
         if (!Directory.Exists(rootValue))
             return [];
 
@@ -371,8 +368,31 @@ internal static class DianaZDocCommands
     private static IEnumerable<string> DiscoverPackages(string project)
     {
         var publishRoot = Path.Combine(project, "z-Publish");
-        foreach (var package in PublishPackages.EnumerateCurrent(publishRoot))
-            yield return package.Path;
+        foreach (var package in EnumerateCurrentPackages(publishRoot))
+            yield return package;
+    }
+
+    private static IEnumerable<string> EnumerateCurrentPackages(string publishRoot)
+    {
+        if (!Directory.Exists(publishRoot))
+            yield break;
+
+        var flatHost = Path.Combine(publishRoot, "manifest.json");
+        if (File.Exists(flatHost)
+            && File.Exists(Path.Combine(publishRoot, "SHA256SUMS"))
+            && File.Exists(Path.Combine(publishRoot, "host", "HistoryVulcan.exe")))
+        {
+            yield return publishRoot;
+        }
+
+        foreach (var directory in Directory.GetDirectories(publishRoot, "History*-v*", SearchOption.TopDirectoryOnly))
+        {
+            if (File.Exists(Path.Combine(directory, "module.manifest.json"))
+                && File.Exists(Path.Combine(directory, "SHA256SUMS")))
+            {
+                yield return directory;
+            }
+        }
     }
 
     private static void TryAddChannel(
@@ -386,7 +406,7 @@ internal static class DianaZDocCommands
             return;
 
         var moduleName = ReadIdentity(package, Path.GetFileName(package));
-        var id = ModuleDomainNaming.ToDomain(moduleName);
+        var id = ToDomain(moduleName);
         if (string.IsNullOrWhiteSpace(id))
             return;
 
@@ -472,6 +492,14 @@ internal static class DianaZDocCommands
             : folderName;
     }
 
+    private static string ToDomain(string moduleName)
+    {
+        var value = (moduleName ?? string.Empty).Trim();
+        if (value.StartsWith("History", StringComparison.OrdinalIgnoreCase))
+            value = value["History".Length..];
+        return value.Length == 0 ? "history" : value.ToLowerInvariant();
+    }
+
     private static string ReadVersion(string package)
     {
         foreach (var (file, key) in new[]
@@ -539,9 +567,9 @@ internal static class DianaZDocCommands
     private static string RenderCatalog(IReadOnlyList<ZDocChannel> channels)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 4.0.0 宿主为平铺 host，现场读取 SHA256SUMS）");
+        builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 5.1.2 宿主为平铺 host，现场读取 SHA256SUMS）");
         builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用其中一个 diana.docs.<通道>。省略 file 只列出该通道。");
-        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 4.0.0），否则只返回目录。");
+        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 5.1.2），否则只返回目录。");
         builder.AppendLine("若列出了通道但命令尚未登记，执行 vulcan.module.reload 让 Diana 按当前运行区重新附着。");
         if (channels.Count == 0)
         {

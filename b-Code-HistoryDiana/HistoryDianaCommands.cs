@@ -1,9 +1,6 @@
 ﻿using System.IO;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Modules;
-using HistoryVulcan.Core.Storage;
-
-using HistoryVulcan.Services.Development;
 
 namespace HistoryDiana;
 
@@ -15,36 +12,47 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         ".vs", ".pio", "bin", "obj", "TestResults", "node_modules", "Library", "Temp", "Logs", "UserSettings",
     };
 
-    private ISettingsService? _settings;
+    private readonly Func<string> _projectLibraryRoot;
+    private readonly Func<OhsmcpClient> _mcpClientFactory;
     private IModuleContext? _context;
 
-    /// <summary>Attaches the host-owned settings store and stages all module commands.</summary>
+    public HistoryDianaCommands()
+        : this(null, null)
+    {
+    }
+
+    internal HistoryDianaCommands(
+        Func<string>? projectLibraryRoot = null,
+        Func<OhsmcpClient>? mcpClientFactory = null)
+    {
+        _projectLibraryRoot = projectLibraryRoot ?? DianaRuntime.ResolveProjectLibraryRoot;
+        _mcpClientFactory = mcpClientFactory ?? (() => OhsmcpClient.FromEndpoint(DianaRuntime.ReadMcpEndpoint()));
+    }
+
+    /// <summary>Attaches the host command bus and stages all module commands.</summary>
     public void Attach(IModuleContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (_settings != null)
+        if (_context != null)
             throw new InvalidOperationException("HistoryDiana 命令已附着到宿主上下文。");
 
-        _settings = context.Settings;
         _context = context;
         context.RegisterCommands(RegisterCommands);
     }
 
     private void RegisterCommands(CommandRegistry registry)
     {
-        var settings = _settings
-            ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
         var context = _context
             ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
         // 工具箱的另外两类：kit（哈希/编码/标识/时间）与 relay（MCP 工具中继）。
         // 按类分文件，但注册入口只有这一处。docs 通道按现场 z-* 扫描登记。
         DianaKitCommands.Register(registry);
-        DianaRelayCommands.Register(registry, settings);
+        DianaRelayCommands.Register(registry, _mcpClientFactory);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
-        DianaZDocCommands.Register(registry, settings);
+        DianaZDocCommands.Register(registry, _projectLibraryRoot);
 
-        // 模块开发路线（工作区、发布、装机）已迁往宿主（HistoryVulcan 4.6.0），
-        // 指令名从 diana.* 改为 vulcan.worktree.* / vulcan.release.*；
+        // 模块开发路线（工作区、发布、装机）已迁往宿主（HistoryVulcan 5.1.2），
+        // 指令名从 diana.* 改为 vulcan.dev.*；
         // diana.trial.load 直接退役——它只是 vulcan.module.install 的一层转发，
         // 在宿主里那层转发没有意义。
         //
@@ -325,9 +333,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
             throw new ArgumentException("name 必须是已登记工作树的单一目录名", nameof(name));
         }
 
-        var settings = _settings
-            ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
-        var rootValue = ProjectLibraryRoot.Resolve(settings);
+        var rootValue = _projectLibraryRoot();
         if (!Directory.Exists(rootValue))
             throw new InvalidOperationException("HistoryVulcan 设置缺少有效的 proj.libraryroot；请先配置 HistoryJanus 项目库。");
 
@@ -340,11 +346,14 @@ public sealed class HistoryDianaCommands : IModuleContextAware
             throw new DirectoryNotFoundException($"项目不存在: {projectName}");
         if ((File.GetAttributes(candidate) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidOperationException($"项目根是重解析点，已拒绝: {projectName}");
-        if (!ProjectLibraryRoot.IsGitProject(candidate))
+        if (!IsGitProject(candidate))
             throw new InvalidOperationException($"目录不是独立 Git 仓库: {projectName}");
 
         return candidate;
     }
+
+    private static bool IsGitProject(string path)
+        => Directory.Exists(Path.Combine(path, ".git")) || File.Exists(Path.Combine(path, ".git"));
 
     private static void RequireRange(int value, int minimum, int maximum, string parameter)
     {

@@ -5,7 +5,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using HistoryVulcan.Core.Storage;
 
 namespace HistoryDiana;
 
@@ -25,28 +24,21 @@ internal sealed class OhsmcpClient : IDisposable
         _endpoint = endpoint;
     }
 
-    public static OhsmcpClient FromSettings(ISettingsService settings, int? timeoutSeconds = null)
+    public static OhsmcpClient FromEndpoint(McpEndpoint endpoint, int? timeoutSeconds = null)
     {
-        ArgumentNullException.ThrowIfNull(settings);
-        if (!int.TryParse(settings.Get("mcp.port"), out var port) || port is < 1024 or > 65535)
-        {
-            throw new InvalidOperationException(
-                "宿主 mcp.port 未设置或无效。relay 只连当前 HistoryVulcan，不再读 OneHistoryStudio。");
-        }
-
+        ArgumentNullException.ThrowIfNull(endpoint);
         var timeout = timeoutSeconds is int explicitTimeout
             ? Math.Clamp(explicitTimeout, 5, 3600)
-            : Math.Clamp(settings.GetInt("mcp.timeout", DefaultTimeoutSeconds), 5, 3600);
-        var token = settings.Get("mcp.token");
+            : DefaultTimeoutSeconds;
 
         var http = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(timeout),
         };
-        if (!string.IsNullOrEmpty(token))
-            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (!string.IsNullOrEmpty(endpoint.AccessToken))
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", endpoint.AccessToken);
 
-        return new OhsmcpClient(http, new Uri($"http://127.0.0.1:{port}/mcp"));
+        return new OhsmcpClient(http, endpoint.Uri);
     }
 
     public async Task<IReadOnlyList<RelayTool>> ListToolsAsync()

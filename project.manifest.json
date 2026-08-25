@@ -15,7 +15,7 @@
       "documentation"
     ],
     "status": "active",
-    "version": "2.0.2",
+    "version": "2.2.0",
     "branch": "main"
   },
   "paths": {
@@ -76,7 +76,7 @@
     "test": "dotnet run --project .\\b-Code-HistoryDiana\\tests\\HistoryDiana.Smoke\\HistoryDiana.Smoke.csproj -c Release",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\b-Code\\Test-ProjectContract.ps1 -Instantiation",
     "run": null,
-    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File ..\\2026-023-HistoryVulcan\\b-Code-HistoryVulcan\\eng\\pipeline\\Publish-OneHistoryModule.ps1 -Module HistoryDiana"
+    "package": "HistoryVulcan.Cli.exe --cli vulcan.dev.submit name=HistoryDiana worktree=<工作区>"
   },
   "externalDependencies": [
     {
@@ -86,8 +86,8 @@
     },
     {
       "name": "HistoryVulcan",
-      "version": "4.6.0",
-      "purpose": "Diana 的模块 API、命令注册、MCP 投影与正式运行宿主"
+      "version": "5.1.2",
+      "purpose": "Diana 的模块 API、命令总线与正式运行宿主"
     }
   ],
   "contextExclusions": [

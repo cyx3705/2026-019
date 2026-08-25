@@ -1,9 +1,8 @@
 ﻿<Project>
   <PropertyGroup>
-    <HistoryDianaVersion>2.0.2</HistoryDianaVersion>
-    <!-- 4.6.0 起模块开发路线与项目库/发布包约定归宿主，本模块直接消费
-         HistoryVulcan.Services.Development，低于该版本的宿主不可用。 -->
-    <MinimumHistoryVulcanVersion>4.6.0</MinimumHistoryVulcanVersion>
+    <HistoryDianaVersion>2.2.0</HistoryDianaVersion>
+    <!-- Vulcan 5.0 收窄 IModuleContext；Diana 通过自身运行时解析器读取项目根和 MCP 端点。 -->
+    <MinimumHistoryVulcanVersion>5.1.2</MinimumHistoryVulcanVersion>
     <VersionPrefix>$(HistoryDianaVersion)</VersionPrefix>
     <Version>$(HistoryDianaVersion)</Version>
     <AssemblyVersion>$(HistoryDianaVersion).0</AssemblyVersion>

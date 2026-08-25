@@ -1,7 +1,7 @@
 # HistoryDiana — OneHistory 的 AI 工作区
 
 HistoryDiana 是 OneHistory 的 **AI 侧常驻工作区**：项目巡检、小工具、MCP 中继和 z 文档通道。
-模块开发闭环已迁到宿主 `vulcan.worktree.*` / `vulcan.release.*`。
+模块开发闭环已迁到宿主 `vulcan.dev.*`。
 
 与 HistoryMercury 对称——Mercury 是人的翻译官，Diana 是 AI 的翻译官（巡检、中继和文档通道）。
 Diana 不提供 UI 页面。
@@ -15,13 +15,12 @@ Diana 不提供 UI 页面。
 | [`project.manifest.json`](./project.manifest.json) | 项目身份、活动目录、文档与命令的机器可读清单 |
 | [`AGENTS.md`](./AGENTS.md) | AI 工作合同：读取顺序、真值判定、边界 |
 | [`b-Office-Diana/`](./b-Office-Diana/) | Diana 自身的项目合同 |
-| HistoryVulcan `b-Office/package/模块开发手册.md` | 开工作树、cycle、并回主线 |
-| HistoryVulcan `eng/pipeline/Publish-OneHistoryModule.ps1` | 由宿主 cycle 拉起的集中发布脚本 |
+| HistoryVulcan `b-Office/package/模块开发手册.md` | 模块开发工作区、送审和并回流程 |
 
 ## 从这里开始
 
-1. 要开发模块，读宿主《模块开发手册》，走 `vulcan.worktree.create` → `vulcan.release.cycle` →
-   `vulcan.worktree.merge`。
+1. 要开发模块，读宿主《模块开发手册》，走 `vulcan.dev.start` → `vulcan.dev.submit` →
+   `vulcan.dev.finish`；宿主自身禁止走这三条。
 2. 需要跨项目说明书时，先执行 `diana.docs.catalog`，把索引留在对话中，再读取对应 z 通道。
 
 ## 指令
@@ -50,9 +49,9 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 ## 部署
 
-宿主只扫描 `%AppData%\HistoryVulcan\Modules`。正式更新走 `vulcan.release.cycle name=HistoryDiana`。
+宿主只扫描 `%AppData%\HistoryVulcan\Modules`。正式候选由宿主模块开发管线提交；本轮不执行提交、安装或热重载。
 
-当前源码版本为 `2.0.2`。
+当前源码版本为 `2.2.0`，适配 HistoryVulcan `5.1.2`。
 
 ## 集中发布
 
