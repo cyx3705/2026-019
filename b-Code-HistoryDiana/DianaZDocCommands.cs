@@ -3,9 +3,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Storage;
-
-using HistoryVulcan.Services.Development;
 
 namespace HistoryDiana;
 
@@ -23,12 +20,11 @@ internal static class DianaZDocCommands
         ".md", ".txt",
     };
 
-    public static void Register(CommandRegistry registry, ISettingsService settings)
+    public static void Register(CommandRegistry registry, Func<string> projectLibraryRoot)
     {
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(projectLibraryRoot);
 
-        var channels = Discover(settings);
         registry.Register(new CommandDescriptor
         {
             Name = "diana.docs.catalog",
@@ -39,52 +35,57 @@ internal static class DianaZDocCommands
             Readonly = true,
             Handler = CommandDescriptor.Sync(_ =>
             {
-                var snapshot = Discover(settings);
+                var snapshot = Discover(projectLibraryRoot);
                 return CommandResult.Ok(RenderCatalog(snapshot), snapshot);
             }),
         });
 
-        foreach (var channel in channels)
+        registry.Register(new CommandDescriptor
         {
-            var captured = channel;
-            registry.Register(new CommandDescriptor
-            {
-                Name = $"diana.docs.{captured.Id}",
-                Domain = "HistoryDiana",
-                CommandClass = "docs",
-                Summary = $"查看 {captured.Module} 已发布 z 快照中的 Markdown；省略 file 只列出本通道",
-                Example = captured.Documents.Count == 0
-                    ? $"diana.docs.{captured.Id}"
-                    : $"diana.docs.{captured.Id} file={captured.Documents[0].Path}",
-                Readonly = true,
-                Parameters =
-                [
-                    new ParameterSpec
-                    {
-                        Name = "file",
-                        Description = "z 内相对路径或唯一文件名；省略则只列出本通道文档，不读正文",
-                        Position = 0,
-                    },
-                    new ParameterSpec
-                    {
-                        Name = "heading",
-                        Description = "只返回该 Markdown 标题的一节，或 x.y.z 版本条目；长文应带上以免整篇进对话",
-                    },
-                ],
-                Handler = CommandDescriptor.Sync(context => OpenChannel(
-                    settings, captured.Id, context.GetString("file"), context.GetString("heading"))),
-            });
-        }
+            Name = "diana.docs.read",
+            Domain = "HistoryDiana",
+            CommandClass = "docs",
+            Summary = "按当前 z 文档目录读取任意模块的 Markdown；新增模块无需新增命令",
+            Example = "diana.docs.read domain=janus file=docs/模块API.md heading=命令",
+            Readonly = true,
+            Parameters =
+            [
+                new ParameterSpec
+                {
+                    Name = "domain",
+                    Description = "catalog 中的模块域，例如 janus、mercury、vulcan；每次调用实时解析",
+                    Required = true,
+                    Position = 0,
+                },
+                new ParameterSpec
+                {
+                    Name = "file",
+                    Description = "z 内相对路径或唯一文件名；省略则只列出该模块文档",
+                    Position = 1,
+                },
+                new ParameterSpec
+                {
+                    Name = "heading",
+                    Description = "只返回该 Markdown 标题的一节，或 x.y.z 版本条目；长文应带上以免整篇进对话",
+                },
+            ],
+            Handler = CommandDescriptor.Sync(context => OpenChannel(
+                projectLibraryRoot,
+                context.RequireString("domain"),
+                context.GetString("file"),
+                context.GetString("heading"))),
+        });
     }
 
-    private static CommandResult OpenChannel(ISettingsService settings, string channelId, string? file, string? heading)
+    private static CommandResult OpenChannel(Func<string> projectLibraryRoot, string channelId, string? file, string? heading)
     {
-        var channel = Discover(settings).FirstOrDefault(item =>
+        channelId = DecodeTransportUnicode(channelId);
+        var channel = Discover(projectLibraryRoot).FirstOrDefault(item =>
             item.Id.Equals(channelId, StringComparison.OrdinalIgnoreCase));
         if (channel == null)
             return CommandResult.Fail($"z 通道不存在或已消失: {channelId}。请先执行 diana.docs.catalog。");
 
-        var relative = (file ?? "").Trim().Replace('\\', '/');
+        var relative = DecodeTransportUnicode(file ?? "").Trim().Replace('\\', '/');
         if (relative.Length == 0)
         {
             return CommandResult.Ok(RenderChannel(channel), channel);
@@ -106,7 +107,7 @@ internal static class DianaZDocCommands
             return CommandResult.Fail($"{document.Path} 的 SHA-256 与 SHA256SUMS 不一致，已拒绝读取");
 
         var markdown = File.ReadAllText(fullPath);
-        var headingValue = (heading ?? "").Trim();
+        var headingValue = DecodeTransportUnicode(heading ?? "").Trim();
         if (headingValue.Length > 0)
         {
             var section = ExtractHeading(markdown, headingValue);
@@ -159,6 +160,14 @@ internal static class DianaZDocCommands
             Content = markdown,
         });
     }
+
+    // Some MCP transports preserve JSON Unicode escapes as literal text before
+    // converting tool arguments to the command bus. Decode them at the module
+    // boundary so Unicode document names and headings remain readable.
+    private static string DecodeTransportUnicode(string value)
+        => Regex.Replace(value, @"(?:\\|/)u([0-9a-fA-F]{4})", match =>
+            ((char)Convert.ToInt32(match.Groups[1].Value, 16)).ToString(),
+            RegexOptions.CultureInvariant);
 
     private static (ZDocFile? Document, string? Error) ResolveDocument(ZDocChannel channel, string relative)
     {
@@ -334,9 +343,9 @@ internal static class DianaZDocCommands
         return builder.ToString();
     }
 
-    private static IReadOnlyList<ZDocChannel> Discover(ISettingsService settings)
+    private static IReadOnlyList<ZDocChannel> Discover(Func<string> projectLibraryRoot)
     {
-        var rootValue = ProjectLibraryRoot.Resolve(settings);
+        var rootValue = projectLibraryRoot();
         if (!Directory.Exists(rootValue))
             return [];
 
@@ -371,8 +380,31 @@ internal static class DianaZDocCommands
     private static IEnumerable<string> DiscoverPackages(string project)
     {
         var publishRoot = Path.Combine(project, "z-Publish");
-        foreach (var package in PublishPackages.EnumerateCurrent(publishRoot))
-            yield return package.Path;
+        foreach (var package in EnumerateCurrentPackages(publishRoot))
+            yield return package;
+    }
+
+    private static IEnumerable<string> EnumerateCurrentPackages(string publishRoot)
+    {
+        if (!Directory.Exists(publishRoot))
+            yield break;
+
+        var flatHost = Path.Combine(publishRoot, "manifest.json");
+        if (File.Exists(flatHost)
+            && File.Exists(Path.Combine(publishRoot, "SHA256SUMS"))
+            && File.Exists(Path.Combine(publishRoot, "host", "HistoryVulcan.exe")))
+        {
+            yield return publishRoot;
+        }
+
+        foreach (var directory in Directory.GetDirectories(publishRoot, "History*-v*", SearchOption.TopDirectoryOnly))
+        {
+            if (File.Exists(Path.Combine(directory, "module.manifest.json"))
+                && File.Exists(Path.Combine(directory, "SHA256SUMS")))
+            {
+                yield return directory;
+            }
+        }
     }
 
     private static void TryAddChannel(
@@ -386,7 +418,7 @@ internal static class DianaZDocCommands
             return;
 
         var moduleName = ReadIdentity(package, Path.GetFileName(package));
-        var id = ModuleDomainNaming.ToDomain(moduleName);
+        var id = ToDomain(moduleName);
         if (string.IsNullOrWhiteSpace(id))
             return;
 
@@ -472,6 +504,14 @@ internal static class DianaZDocCommands
             : folderName;
     }
 
+    private static string ToDomain(string moduleName)
+    {
+        var value = (moduleName ?? string.Empty).Trim();
+        if (value.StartsWith("History", StringComparison.OrdinalIgnoreCase))
+            value = value["History".Length..];
+        return value.Length == 0 ? "history" : value.ToLowerInvariant();
+    }
+
     private static string ReadVersion(string package)
     {
         foreach (var (file, key) in new[]
@@ -539,10 +579,10 @@ internal static class DianaZDocCommands
     private static string RenderCatalog(IReadOnlyList<ZDocChannel> channels)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 4.0.0 宿主为平铺 host，现场读取 SHA256SUMS）");
-        builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用其中一个 diana.docs.<通道>。省略 file 只列出该通道。");
-        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 4.0.0），否则只返回目录。");
-        builder.AppendLine("若列出了通道但命令尚未登记，执行 vulcan.module.reload 让 Diana 按当前运行区重新附着。");
+        builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 5.1.2 宿主为平铺 host，现场读取 SHA256SUMS）");
+        builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用 diana.docs.read domain=<通道>。省略 file 只列出该通道。");
+        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 5.1.2），否则只返回目录。");
+        builder.AppendLine("diana.docs.read 每次按当前 z 快照解析通道；新增模块无需新增或重载 Diana 命令。");
         if (channels.Count == 0)
         {
             builder.Append("当前项目库下没有合规的 z-Publish 当前候选（模块版本目录或平铺 host 宿主）。");
@@ -552,7 +592,7 @@ internal static class DianaZDocCommands
         foreach (var channel in channels)
         {
             builder.AppendLine();
-            builder.Append($"- {channel.Id}  diana.docs.{channel.Id}  {channel.Folder}  {channel.Module} {channel.Version}");
+            builder.Append($"- {channel.Id}  diana.docs.read domain={channel.Id}  {channel.Folder}  {channel.Module} {channel.Version}");
             if (channel.Documents.Count == 0)
             {
                 builder.AppendLine("  （无可读 Markdown）");
