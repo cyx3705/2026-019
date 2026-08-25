@@ -79,12 +79,13 @@ internal static class DianaZDocCommands
 
     private static CommandResult OpenChannel(Func<string> projectLibraryRoot, string channelId, string? file, string? heading)
     {
+        channelId = DecodeTransportUnicode(channelId);
         var channel = Discover(projectLibraryRoot).FirstOrDefault(item =>
             item.Id.Equals(channelId, StringComparison.OrdinalIgnoreCase));
         if (channel == null)
             return CommandResult.Fail($"z 通道不存在或已消失: {channelId}。请先执行 diana.docs.catalog。");
 
-        var relative = (file ?? "").Trim().Replace('\\', '/');
+        var relative = DecodeTransportUnicode(file ?? "").Trim().Replace('\\', '/');
         if (relative.Length == 0)
         {
             return CommandResult.Ok(RenderChannel(channel), channel);
@@ -106,7 +107,7 @@ internal static class DianaZDocCommands
             return CommandResult.Fail($"{document.Path} 的 SHA-256 与 SHA256SUMS 不一致，已拒绝读取");
 
         var markdown = File.ReadAllText(fullPath);
-        var headingValue = (heading ?? "").Trim();
+        var headingValue = DecodeTransportUnicode(heading ?? "").Trim();
         if (headingValue.Length > 0)
         {
             var section = ExtractHeading(markdown, headingValue);
@@ -159,6 +160,14 @@ internal static class DianaZDocCommands
             Content = markdown,
         });
     }
+
+    // Some MCP transports preserve JSON Unicode escapes as literal text before
+    // converting tool arguments to the command bus. Decode them at the module
+    // boundary so Unicode document names and headings remain readable.
+    private static string DecodeTransportUnicode(string value)
+        => Regex.Replace(value, @"\\u([0-9a-fA-F]{4})", match =>
+            ((char)Convert.ToInt32(match.Groups[1].Value, 16)).ToString(),
+            RegexOptions.CultureInvariant);
 
     private static (ZDocFile? Document, string? Error) ResolveDocument(ZDocChannel channel, string relative)
     {
