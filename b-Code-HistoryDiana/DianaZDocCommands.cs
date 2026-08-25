@@ -25,7 +25,6 @@ internal static class DianaZDocCommands
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(projectLibraryRoot);
 
-        var channels = Discover(projectLibraryRoot);
         registry.Register(new CommandDescriptor
         {
             Name = "diana.docs.catalog",
@@ -41,37 +40,41 @@ internal static class DianaZDocCommands
             }),
         });
 
-        foreach (var channel in channels)
+        registry.Register(new CommandDescriptor
         {
-            var captured = channel;
-            registry.Register(new CommandDescriptor
-            {
-                Name = $"diana.docs.{captured.Id}",
-                Domain = "HistoryDiana",
-                CommandClass = "docs",
-                Summary = $"查看 {captured.Module} 已发布 z 快照中的 Markdown；省略 file 只列出本通道",
-                Example = captured.Documents.Count == 0
-                    ? $"diana.docs.{captured.Id}"
-                    : $"diana.docs.{captured.Id} file={captured.Documents[0].Path}",
-                Readonly = true,
-                Parameters =
-                [
-                    new ParameterSpec
-                    {
-                        Name = "file",
-                        Description = "z 内相对路径或唯一文件名；省略则只列出本通道文档，不读正文",
-                        Position = 0,
-                    },
-                    new ParameterSpec
-                    {
-                        Name = "heading",
-                        Description = "只返回该 Markdown 标题的一节，或 x.y.z 版本条目；长文应带上以免整篇进对话",
-                    },
-                ],
-                Handler = CommandDescriptor.Sync(context => OpenChannel(
-                    projectLibraryRoot, captured.Id, context.GetString("file"), context.GetString("heading"))),
-            });
-        }
+            Name = "diana.docs.read",
+            Domain = "HistoryDiana",
+            CommandClass = "docs",
+            Summary = "按当前 z 文档目录读取任意模块的 Markdown；新增模块无需新增命令",
+            Example = "diana.docs.read domain=janus file=docs/模块API.md heading=命令",
+            Readonly = true,
+            Parameters =
+            [
+                new ParameterSpec
+                {
+                    Name = "domain",
+                    Description = "catalog 中的模块域，例如 janus、mercury、vulcan；每次调用实时解析",
+                    Required = true,
+                    Position = 0,
+                },
+                new ParameterSpec
+                {
+                    Name = "file",
+                    Description = "z 内相对路径或唯一文件名；省略则只列出该模块文档",
+                    Position = 1,
+                },
+                new ParameterSpec
+                {
+                    Name = "heading",
+                    Description = "只返回该 Markdown 标题的一节，或 x.y.z 版本条目；长文应带上以免整篇进对话",
+                },
+            ],
+            Handler = CommandDescriptor.Sync(context => OpenChannel(
+                projectLibraryRoot,
+                context.RequireString("domain"),
+                context.GetString("file"),
+                context.GetString("heading"))),
+        });
     }
 
     private static CommandResult OpenChannel(Func<string> projectLibraryRoot, string channelId, string? file, string? heading)
@@ -568,9 +571,9 @@ internal static class DianaZDocCommands
     {
         var builder = new System.Text.StringBuilder();
         builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 5.1.2 宿主为平铺 host，现场读取 SHA256SUMS）");
-        builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用其中一个 diana.docs.<通道>。省略 file 只列出该通道。");
+        builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用 diana.docs.read domain=<通道>。省略 file 只列出该通道。");
         builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 5.1.2），否则只返回目录。");
-        builder.AppendLine("若列出了通道但命令尚未登记，执行 vulcan.module.reload 让 Diana 按当前运行区重新附着。");
+        builder.AppendLine("diana.docs.read 每次按当前 z 快照解析通道；新增模块无需新增或重载 Diana 命令。");
         if (channels.Count == 0)
         {
             builder.Append("当前项目库下没有合规的 z-Publish 当前候选（模块版本目录或平铺 host 宿主）。");
@@ -580,7 +583,7 @@ internal static class DianaZDocCommands
         foreach (var channel in channels)
         {
             builder.AppendLine();
-            builder.Append($"- {channel.Id}  diana.docs.{channel.Id}  {channel.Folder}  {channel.Module} {channel.Version}");
+            builder.Append($"- {channel.Id}  diana.docs.read domain={channel.Id}  {channel.Folder}  {channel.Module} {channel.Version}");
             if (channel.Documents.Count == 0)
             {
                 builder.AppendLine("  （无可读 Markdown）");

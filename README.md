@@ -25,7 +25,7 @@ Diana 不提供 UI 页面。
 
 ## 指令
 
-四类。当前固定 14 条命令，另按现场 z 动态登记 `diana.docs.<域>`。
+四类。文档查看使用固定的 `diana.docs.read`，每次按现场 z 动态解析模块域。
 唯一 `standard` 写命令是 `diana.relay.call`。
 
 | 类 | 指令 | 用途 |
@@ -35,7 +35,7 @@ Diana 不提供 UI 页面。
 | `kit` | `diana.kit.sha256` / `base64` / `guid` / `now` | 无副作用的小计算 |
 | `relay` | `diana.relay.list` / `describe` / `call` | 按当前 MCP 策略实时列举与调用工具 |
 | `docs` | `diana.docs.catalog` | 现场扫描全部 z 通道 |
-| `docs` | `diana.docs.<域>` | 一个 z 文件夹一条通道 |
+| `docs` | `diana.docs.read domain=<域>` | 按当前 z 快照读取任意模块文档 |
 
 ## 构建与验证
 
@@ -51,7 +51,7 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 宿主只扫描 `%AppData%\HistoryVulcan\Modules`。正式候选由宿主模块开发管线提交；本轮不执行提交、安装或热重载。
 
-当前源码版本为 `2.2.0`，适配 HistoryVulcan `5.1.2`。
+当前源码版本为 `2.2.1`，适配 HistoryVulcan `5.1.2`。
 
 ## 集中发布
 
