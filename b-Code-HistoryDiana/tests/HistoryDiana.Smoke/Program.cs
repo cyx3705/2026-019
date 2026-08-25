@@ -6,7 +6,6 @@ using HistoryDiana;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Logging;
 using HistoryVulcan.Core.Modules;
-using HistoryVulcan.Core.Storage;
 
 var temporaryRoot = Path.Combine(Path.GetTempPath(), "HistoryDiana.Smoke", Guid.NewGuid().ToString("N"));
 var commandCount = 0;
@@ -17,6 +16,21 @@ try
     var worktreeDirectory = Path.Combine(temporaryRoot, projectName);
     Directory.CreateDirectory(Path.Combine(worktreeDirectory, ".git"));
     File.WriteAllText(Path.Combine(worktreeDirectory, "sample.txt"), "HistoryDiana smoke test");
+
+    var endpointPath = Path.Combine(temporaryRoot, "endpoint.json");
+    File.WriteAllText(endpointPath, "{\"port\":59095,\"accessToken\":\"smoke-token\"}");
+    var previousEndpoint = Environment.GetEnvironmentVariable("HISTORYVULCAN_ENDPOINT");
+    Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", endpointPath);
+    try
+    {
+        var endpoint = DianaRuntime.ReadMcpEndpoint();
+        Equal("http://127.0.0.1:59095/mcp", endpoint.Uri.ToString(), "MCP endpoint URI");
+        Equal("smoke-token", endpoint.AccessToken, "MCP endpoint token");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", previousEndpoint);
+    }
 
     var channelPackage = Path.Combine(
         temporaryRoot, "2026-020-HistoryJanus", "z-Publish", "HistoryJanus-v9.9.9");
@@ -39,12 +53,8 @@ try
     var registry = new CommandRegistry();
     var log = new TestLog();
     var bus = new CommandBus(registry, log);
-    var settings = new TestSettings(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["proj.libraryroot"] = temporaryRoot,
-    });
-    var context = new TestModuleContext(bus, settings, log, temporaryRoot, registry);
-    new HistoryDianaCommands().Attach(context);
+    var context = new TestModuleContext(bus, registry);
+    new HistoryDianaCommands(() => temporaryRoot).Attach(context);
 
     var assembly = typeof(HistoryDianaCommands).Assembly;
     var moduleInfos = assembly.GetTypes()
@@ -64,7 +74,7 @@ try
                  "diana.project.align", "diana.project.docs", "diana.project.largest",
                  "diana.project.manifest", "diana.project.recent", "diana.project.summary",
                  "diana.relay.call", "diana.relay.describe", "diana.relay.list",
-                 "diana.docs.catalog", "diana.docs.janus",
+                 "diana.docs.catalog", "diana.docs.read",
              })
     {
         True(names.Contains(required), $"缺少命令 {required}");
@@ -101,26 +111,26 @@ try
         "缺 manifest 的项目必须明确失败");
 
     var catalog = await bus.ExecuteAsync("diana.docs.catalog", "smoke");
-    True(catalog.Success && catalog.Message.Contains("diana.docs.janus", StringComparison.Ordinal),
+    True(catalog.Success && catalog.Message.Contains("diana.docs.read domain=janus", StringComparison.Ordinal),
         "catalog 必须列出版本化候选通道");
     True(catalog.Message.Contains("History*-v*", StringComparison.Ordinal), "catalog 必须说明版本化候选规则");
     True(!catalog.Message.Contains("current", StringComparison.OrdinalIgnoreCase), "catalog 不得引用 current 层");
-    var listed = await bus.ExecuteAsync("diana.docs.janus", "smoke");
+    var listed = await bus.ExecuteAsync("diana.docs.read domain=janus", "smoke");
     True(listed.Success && listed.Message.Contains("docs/模块API.md", StringComparison.Ordinal), "文档通道列举");
-    var opened = await bus.ExecuteAsync("diana.docs.janus file=模块API.md heading=命令", "smoke");
+    var opened = await bus.ExecuteAsync("diana.docs.read domain=janus file=模块API.md heading=命令", "smoke");
     True(opened.Success && opened.Message.Contains("command-body", StringComparison.Ordinal), "文档按节读取");
     True(!opened.Message.Contains("window-body", StringComparison.Ordinal), "按节读取不得越界");
-    var outline = await bus.ExecuteAsync("diana.docs.janus file=docs/变更摘要.md", "smoke");
+    var outline = await bus.ExecuteAsync("diana.docs.read domain=janus file=docs/变更摘要.md", "smoke");
     True(outline.Success && outline.Message.Contains("版本:", StringComparison.Ordinal), "长文默认返回目录");
-    var versionSlice = await bus.ExecuteAsync("diana.docs.janus file=变更摘要.md heading=9.9.9", "smoke");
+    var versionSlice = await bus.ExecuteAsync("diana.docs.read domain=janus file=变更摘要.md heading=9.9.9", "smoke");
     True(versionSlice.Success && versionSlice.Message.Contains("first-item", StringComparison.Ordinal), "按版本读取");
     True(!versionSlice.Message.Contains("other-item", StringComparison.Ordinal), "版本读取不得带入其他版本");
-    True(!(await bus.ExecuteAsync("diana.docs.janus file=../secret.md", "smoke")).Success, "文档路径不得越界");
+    True(!(await bus.ExecuteAsync("diana.docs.read domain=janus file=../secret.md", "smoke")).Success, "文档路径不得越界");
 
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
         "程序集不得保留 ProjectPulse 类型");
-    Equal(0, assembly.GetTypes().Count(type => type.IsPublic && !type.IsAbstract
-        && typeof(IUiModule).IsAssignableFrom(type)), "模块不得注册 UI 生命周期");
+    Equal(0, assembly.GetTypes().Count(type => type.Name.Equals("IUiModule", StringComparison.Ordinal)),
+        "模块不得声明已移除的 UI 生命周期类型");
 }
 finally
 {
@@ -149,27 +159,10 @@ static void SequenceEqual<T>(IReadOnlyList<T> expected, IReadOnlyList<T> actual,
         throw new InvalidOperationException($"{message}: expected={string.Join(',', expected)}, actual={string.Join(',', actual)}");
 }
 
-sealed class TestModuleContext(
-    CommandBus bus,
-    ISettingsService settings,
-    IShellLog log,
-    string dataDirectory,
-    CommandRegistry registry) : IModuleContext
+sealed class TestModuleContext(CommandBus bus, CommandRegistry registry) : IModuleContext
 {
     public CommandBus Bus { get; } = bus;
-    public ISettingsService Settings { get; } = settings;
-    public IShellLog Log { get; } = log;
-    public string DataDirectory { get; } = dataDirectory;
     public void RegisterCommands(Action<CommandRegistry> configure) => configure(registry);
-}
-
-sealed class TestSettings(IReadOnlyDictionary<string, string> values) : ISettingsService
-{
-    private readonly Dictionary<string, string> _values = new(values, StringComparer.OrdinalIgnoreCase);
-    public string? Get(string key) => _values.GetValueOrDefault(key);
-    public int GetInt(string key, int fallback) => int.TryParse(Get(key), out var value) ? value : fallback;
-    public void Set(string key, string value) => _values[key] = value;
-    public IReadOnlyList<KeyValuePair<string, string>> All() => _values.ToList();
 }
 
 sealed class TestLog : IShellLog
