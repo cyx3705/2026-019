@@ -1,7 +1,7 @@
 # AIReady 项目工具
 
-本目录是 AIReady 模板自身的 b 级代码组件，保存项目合同检查等可重复执行的维护工具。
-它不承载派生项目的业务源码；派生项目可按实际组件建立 `b-Code-<组件名>/`。
+本目录保存 HistoryDiana 的项目合同检查和候选构建辅助工具，属于活动源码根，不能删除。
+它不承载 Diana 模块业务源码；模块实现和 Smoke 位于 `b-Code-HistoryDiana/`。
 
 `Test-ProjectContract.ps1` 验证 manifest、活动路径、a/b/z 根目录规则、现行文档、本地 Markdown
 链接和实例化占位符。脚本只读检查仓库，不提交、推送、发布或修改外部系统。

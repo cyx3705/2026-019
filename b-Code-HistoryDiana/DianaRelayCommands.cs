@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Storage;
 
 namespace HistoryDiana;
 
@@ -18,10 +17,10 @@ internal static class DianaRelayCommands
     private const int MaximumArgumentsBytes = 64 * 1024;
     private const int CycleCallTimeoutSeconds = 21 * 60;
 
-    public static void Register(CommandRegistry registry, ISettingsService settings)
+    public static void Register(CommandRegistry registry, Func<OhsmcpClient> clientFactory)
     {
         ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(clientFactory);
 
         registry.Register(new CommandDescriptor
         {
@@ -41,7 +40,7 @@ internal static class DianaRelayCommands
                 var filter = (context.GetString("filter") ?? "").Trim();
                 var modulesOnly = context.GetBool("modulesonly", true);
 
-                using var client = OhsmcpClient.FromSettings(settings);
+                using var client = clientFactory();
                 var tools = await client.ListToolsAsync().ConfigureAwait(false);
                 if (modulesOnly)
                 {
@@ -81,7 +80,7 @@ internal static class DianaRelayCommands
             Handler = async context =>
             {
                 var name = RequireToolName(context.RequireString("name"));
-                using var client = OhsmcpClient.FromSettings(settings);
+                using var client = clientFactory();
                 var tools = await client.ListToolsAsync().ConfigureAwait(false);
                 var tool = tools.FirstOrDefault(item =>
                     item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -130,8 +129,8 @@ internal static class DianaRelayCommands
                 }
 
                 using var client = name.Equals("diana_release_cycle", StringComparison.OrdinalIgnoreCase)
-                    ? OhsmcpClient.FromSettings(settings, CycleCallTimeoutSeconds)
-                    : OhsmcpClient.FromSettings(settings);
+                    ? OhsmcpClient.FromEndpoint(DianaRuntime.ReadMcpEndpoint(), CycleCallTimeoutSeconds)
+                    : clientFactory();
                 var tools = await client.ListToolsAsync().ConfigureAwait(false);
                 var target = tools.FirstOrDefault(tool =>
                     tool.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
