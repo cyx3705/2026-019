@@ -16,6 +16,7 @@ Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulca
 | [`project.manifest.json`](./project.manifest.json) | 项目身份、活动目录、文档与命令的机器可读清单 |
 | [`AGENTS.md`](./AGENTS.md) | AI 工作合同：读取顺序、真值判定、边界 |
 | [`b-Office-Diana/`](./b-Office-Diana/) | Diana 自身的项目合同 |
+| [`原生控制台日志查看需求书`](./b-Office-Diana/current/原生控制台日志查看需求书.md) | 计划中的 `diana.log.read` 数据源、接口与验收；尚未实现 |
 | HistoryVulcan `b-Office/package/模块开发手册.md` | 模块开发工作区、送审和并回流程 |
 
 ## 从这里开始
@@ -60,5 +61,8 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 ## 开发管线例外
 
 Diana 不拥有发布器，也不登记 `diana.worktree.*`、`diana.release.*` 或 `diana.trial.*`。
-已冻结的模块开发管线及 z 写入由 HistoryVulcan 独占；当前登记的模块包括 `HistoryDiana`、
-`HistoryJanus`、`HistoryMercury`、`HistoryMinerva`、`HistoryAurora` 和 `HistoryPortunus`。
+已冻结的模块开发管线及 z 写入由 HistoryVulcan 独占。已登记 `HistoryDiana`、`HistoryJanus`、
+`HistoryMercury`、`HistoryMinerva`、`HistoryAurora`、`HistoryPortunus`（`kind=module`）；
+`HistoryVulcan` 是 `kind=host`，禁止走模块开发管线。
+登记表位于宿主仓 `2026-023-HistoryVulcan/b-Code-Eng/pipeline/module-publish.manifest.json`。
+写入 z 只走 `vulcan.dev.submit` / `finish`（模块）或 `vulcan.release.cycle`（宿主）。本仓不发布。
