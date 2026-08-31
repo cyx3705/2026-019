@@ -38,6 +38,57 @@ foreach ($field in @('id', 'name', 'title', 'status', 'version', 'branch')) {
     }
 }
 
+if ($manifest.project.title -ne 'HistoryDiana AI 工具区') {
+    $errors.Add('project.title 必须为 HistoryDiana AI 工具区')
+}
+
+$positioningDocuments = @(
+    'README.md',
+    'AGENTS.md',
+    'b-Office-Diana/current/项目概览.md',
+    'b-Office-Diana/current/技术合同.md',
+    'b-Office-Diana/current/有效决策.md',
+    'b-Office-Diana/current/验证合同.md',
+    'b-Office-Diana/文档中心.md',
+    'b-Office-Diana/package/复用说明.md'
+)
+foreach ($relativePath in $positioningDocuments) {
+    $content = Get-Content -LiteralPath (Join-Path $repoRoot $relativePath) -Raw -Encoding UTF8
+    if ($content -notmatch 'AI 工具区') {
+        $errors.Add("现行入口未声明 AI 工具区定位: $relativePath")
+    }
+}
+
+$pipelineBoundaryDocuments = @(
+    'README.md',
+    'AGENTS.md',
+    'b-Office-Diana/current/项目概览.md',
+    'b-Office-Diana/current/技术合同.md',
+    'b-Office-Diana/package/复用说明.md'
+)
+foreach ($relativePath in $pipelineBoundaryDocuments) {
+    $content = Get-Content -LiteralPath (Join-Path $repoRoot $relativePath) -Raw -Encoding UTF8
+    if ($content -notmatch 'vulcan\.dev\.start' -or $content -notmatch 'Console CLI') {
+        $errors.Add("现行入口未声明冻结开发管线的 CLI 边界: $relativePath")
+    }
+}
+
+$currentPositioningText = @(
+    'README.md',
+    'b-Office-Diana/current/项目概览.md',
+    'b-Office-Diana/current/技术合同.md',
+    'b-Office-Diana/current/验证合同.md',
+    'b-Office-Diana/package/复用说明.md'
+) | ForEach-Object {
+    Get-Content -LiteralPath (Join-Path $repoRoot $_) -Raw -Encoding UTF8
+}
+$currentPositioningText = $currentPositioningText -join "`n"
+foreach ($obsoleteText in @('AI 侧常驻工作区', '开发闭环走宿主 MCP', 'HistoryAurora 当前不在 Diana 模块登记表')) {
+    if ($currentPositioningText.Contains($obsoleteText)) {
+        $errors.Add("现行合同仍含过时定位: $obsoleteText")
+    }
+}
+
 foreach ($file in @($manifest.contract.requiredFiles)) { Require-File $file }
 foreach ($directory in @($manifest.paths.activeRoots)) { Require-Directory $directory }
 
@@ -49,6 +100,13 @@ if ($manifest.project.version -ne $moduleVersion -or $moduleManifest.version -ne
 }
 if ($moduleManifest.name -ne 'HistoryDiana' -or $moduleManifest.type -ne 'HistoryVulcan.Module') {
     $errors.Add('模块 manifest 身份无效')
+}
+if ($moduleManifest.description -notmatch 'AI 工具区') {
+    $errors.Add('模块 manifest 描述未声明 AI 工具区定位')
+}
+$moduleInfoSource = Get-Content -LiteralPath (Join-Path $repoRoot 'b-Code-HistoryDiana\ModuleInfo.cs') -Raw -Encoding UTF8
+if ($moduleInfoSource -notmatch 'AI 工具区') {
+    $errors.Add('ModuleInfo 运行时描述未声明 AI 工具区定位')
 }
 
 $hostDependency = @($manifest.externalDependencies | Where-Object { $_.name -eq 'HistoryVulcan' })
