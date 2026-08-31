@@ -14,6 +14,7 @@ internal static class DianaZDocCommands
 {
     private const int MaximumDocumentBytes = 512 * 1024;
     private const int OutlineWithoutHeadingBytes = 12 * 1024;
+    private const int MaximumErrorSuggestions = 20;
     private static readonly Regex VersionToken = new(@"^\d+\.\d+\.\d+\b", RegexOptions.CultureInvariant);
     private static readonly HashSet<string> DocumentExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -33,11 +34,11 @@ internal static class DianaZDocCommands
             Summary = "列出全部 z 文档通道与文件名；跨项目读文档前必须先执行本命令，把索引留在对话里",
             Example = "diana.docs.catalog",
             Readonly = true,
-            Handler = CommandDescriptor.Sync(_ =>
+            Handler = CommandDescriptor.Sync(_ => DianaCommandGuard.Run(() =>
             {
                 var snapshot = Discover(projectLibraryRoot);
                 return CommandResult.Ok(RenderCatalog(snapshot), snapshot);
-            }),
+            })),
         });
 
         registry.Register(new CommandDescriptor
@@ -69,11 +70,11 @@ internal static class DianaZDocCommands
                     Description = "只返回该 Markdown 标题的一节，或 x.y.z 版本条目；长文应带上以免整篇进对话",
                 },
             ],
-            Handler = CommandDescriptor.Sync(context => OpenChannel(
+            Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() => OpenChannel(
                 projectLibraryRoot,
                 context.RequireString("domain"),
                 context.GetString("file"),
-                context.GetString("heading"))),
+                context.GetString("heading")))),
         });
     }
 
@@ -115,11 +116,7 @@ internal static class DianaZDocCommands
             {
                 var headings = ListHeadings(markdown);
                 var versions = ListVersions(markdown);
-                var available = headings.Count == 0
-                    ? "没有 Markdown 标题"
-                    : $"可用章节: {string.Join("、", headings)}";
-                if (versions.Count > 0)
-                    available += $"。可用版本: {string.Join("、", versions)}";
+                var available = RenderErrorSuggestions(headings, versions);
                 return CommandResult.Fail($"{document.Path} 没有标题或版本「{headingValue}」。{available}");
             }
 
@@ -221,6 +218,33 @@ internal static class DianaZDocCommands
         }
 
         return versions;
+    }
+
+    private static string RenderErrorSuggestions(
+        IReadOnlyList<string> headings,
+        IReadOnlyList<string> versions)
+    {
+        var parts = new List<string>();
+        if (headings.Count == 0)
+        {
+            parts.Add("没有 Markdown 标题");
+        }
+        else
+        {
+            parts.Add(RenderSuggestionGroup("可用章节", headings));
+        }
+
+        if (versions.Count > 0)
+            parts.Add(RenderSuggestionGroup("可用版本", versions));
+        parts.Add("省略 heading 可获取完整目录");
+        return string.Join("。", parts);
+    }
+
+    private static string RenderSuggestionGroup(string label, IReadOnlyList<string> values)
+    {
+        var shown = values.Take(MaximumErrorSuggestions).ToList();
+        var count = values.Count > shown.Count ? $"（前 {shown.Count}/{values.Count} 项）" : "";
+        return $"{label}{count}: {string.Join("、", shown)}";
     }
 
     private static string? ExtractHeading(string markdown, string heading)
@@ -417,11 +441,6 @@ internal static class DianaZDocCommands
         if (!File.Exists(sumsPath))
             return;
 
-        var moduleName = ReadIdentity(package, Path.GetFileName(package));
-        var id = ToDomain(moduleName);
-        if (string.IsNullOrWhiteSpace(id))
-            return;
-
         Dictionary<string, string> hashes;
         try
         {
@@ -431,6 +450,13 @@ internal static class DianaZDocCommands
         {
             return;
         }
+
+        var identity = ReadIdentity(package, Path.GetFileName(package), hashes);
+        if (identity == null)
+            return;
+        var id = ToDomain(identity.Module);
+        if (string.IsNullOrWhiteSpace(id))
+            return;
 
         var documents = new List<ZDocFile>();
         foreach (var (relative, expected) in hashes)
@@ -451,19 +477,21 @@ internal static class DianaZDocCommands
             documents.Add(new ZDocFile(relative, expected, new FileInfo(fullPath).Length));
         }
 
-        var version = ReadVersion(package);
         var relativeFolder = Path.GetRelativePath(project, package).Replace('\\', '/');
         channels.Add(new ZDocChannel(
             id,
-            moduleName,
-            version,
+            identity.Module,
+            identity.Version,
             projectDirectory,
             relativeFolder,
             Path.GetFullPath(package),
             documents.OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToList()));
     }
 
-    private static string ReadIdentity(string package, string folderName)
+    private static PackageIdentity? ReadIdentity(
+        string package,
+        string folderName,
+        IReadOnlyDictionary<string, string> hashes)
     {
         var moduleManifest = Path.Combine(package, "module.manifest.json");
         if (File.Exists(moduleManifest))
@@ -471,14 +499,17 @@ internal static class DianaZDocCommands
             try
             {
                 using var document = JsonDocument.Parse(File.ReadAllText(moduleManifest));
-                if (document.RootElement.TryGetProperty("name", out var name)
-                    && name.GetString() is { Length: > 0 } moduleName)
-                {
-                    return moduleName;
-                }
+                var moduleName = RequiredManifestString(document.RootElement, "name");
+                var version = RequiredManifestString(document.RootElement, "version");
+                var suffix = $"-v{version}";
+                if (!folderName.Equals(moduleName + suffix, StringComparison.OrdinalIgnoreCase)
+                    || !ManifestHashMatches(package, "module.manifest.json", hashes))
+                    return null;
+                return new PackageIdentity(moduleName, version);
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
             {
+                return null;
             }
         }
 
@@ -488,20 +519,40 @@ internal static class DianaZDocCommands
             try
             {
                 using var document = JsonDocument.Parse(File.ReadAllText(hostManifest));
-                if (document.RootElement.TryGetProperty("product", out var product)
-                    && product.GetString() is { Length: > 0 } productName)
-                {
-                    return productName;
-                }
+                var productName = RequiredManifestString(document.RootElement, "product");
+                var version = RequiredManifestString(document.RootElement, "version");
+                if (!productName.Equals("HistoryVulcan", StringComparison.OrdinalIgnoreCase)
+                    || !ManifestHashMatches(package, "manifest.json", hashes))
+                    return null;
+                return new PackageIdentity(productName, version);
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
             {
+                return null;
             }
         }
 
-        return folderName.StartsWith("z-", StringComparison.OrdinalIgnoreCase)
-            ? folderName[2..]
-            : folderName;
+        return null;
+    }
+
+    private static string RequiredManifestString(JsonElement root, string name)
+        => root.ValueKind == JsonValueKind.Object
+           && root.TryGetProperty(name, out var value)
+           && value.ValueKind == JsonValueKind.String
+           && value.GetString() is { Length: > 0 } text
+            ? text
+            : throw new InvalidOperationException($"manifest 缺少字符串: {name}");
+
+    private static bool ManifestHashMatches(
+        string package,
+        string manifestName,
+        IReadOnlyDictionary<string, string> hashes)
+    {
+        if (!hashes.TryGetValue(manifestName, out var expected))
+            return false;
+        var path = ResolveInside(package, manifestName);
+        var actual = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+        return actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ToDomain(string moduleName)
@@ -510,34 +561,6 @@ internal static class DianaZDocCommands
         if (value.StartsWith("History", StringComparison.OrdinalIgnoreCase))
             value = value["History".Length..];
         return value.Length == 0 ? "history" : value.ToLowerInvariant();
-    }
-
-    private static string ReadVersion(string package)
-    {
-        foreach (var (file, key) in new[]
-        {
-            ("module.manifest.json", "version"),
-            ("manifest.json", "version"),
-        })
-        {
-            var path = Path.Combine(package, file);
-            if (!File.Exists(path))
-                continue;
-            try
-            {
-                using var document = JsonDocument.Parse(File.ReadAllText(path));
-                if (document.RootElement.TryGetProperty(key, out var version)
-                    && version.GetString() is { Length: > 0 } value)
-                {
-                    return value;
-                }
-            }
-            catch (JsonException)
-            {
-            }
-        }
-
-        return "unknown";
     }
 
     private static Dictionary<string, string> ReadChecksums(string sumsPath)
@@ -559,7 +582,7 @@ internal static class DianaZDocCommands
         return hashes;
     }
 
-    private static string ResolveInside(string package, string relative)
+    internal static string ResolveInside(string package, string relative)
     {
         if (string.IsNullOrWhiteSpace(relative)
             || Path.IsPathRooted(relative)
@@ -568,12 +591,38 @@ internal static class DianaZDocCommands
             throw new InvalidOperationException($"路径必须是 z 目录内的相对路径: {relative}");
         }
 
-        var root = Path.GetFullPath(package).TrimEnd(Path.DirectorySeparatorChar)
-                   + Path.DirectorySeparatorChar;
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(package));
+        var rootPrefix = root + Path.DirectorySeparatorChar;
         var resolved = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
-        if (!resolved.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        if (!resolved.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"路径越出 Z 目录: {relative}");
+
+        RejectReparseTraversal(root, resolved, relative);
         return resolved;
+    }
+
+    private static void RejectReparseTraversal(string root, string resolved, string relative)
+    {
+        var current = root;
+        try
+        {
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"Z 包根是重解析点: {relative}");
+
+            foreach (var segment in Path.GetRelativePath(root, resolved)
+                         .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            {
+                current = Path.Combine(current, segment);
+                if (!File.Exists(current) && !Directory.Exists(current))
+                    break;
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException($"Z 包路径包含重解析点: {relative}");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"无法验证 Z 包路径: {relative}", ex);
+        }
     }
 
     private static string RenderCatalog(IReadOnlyList<ZDocChannel> channels)
@@ -616,6 +665,8 @@ internal static class DianaZDocCommands
     }
 
     private sealed record ZDocFile(string Path, string Sha256, long Bytes);
+
+    private sealed record PackageIdentity(string Module, string Version);
 
     private sealed record ZDocChannel(
         string Id,
