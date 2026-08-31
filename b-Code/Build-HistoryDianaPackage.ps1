@@ -11,16 +11,6 @@ Set-StrictMode -Version Latest
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $publishRoot = Join-Path $repoRoot 'z-Publish'
-if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
-    $OutputRoot = $publishRoot
-}
-$OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
-$repoPrefix = $repoRoot.TrimEnd('\') + '\'
-$tempPrefix = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
-if (-not ($OutputRoot.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase) -or
-          $OutputRoot.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase))) {
-    throw "OutputRoot must remain inside the HistoryDiana project or the process temp directory: $OutputRoot"
-}
 
 $projectPath = Join-Path $repoRoot 'b-Code-HistoryDiana\HistoryDiana.csproj'
 $manifestSource = Join-Path $repoRoot 'b-Code-HistoryDiana\module.manifest.json'
@@ -103,6 +93,22 @@ if ($version -notmatch '^\d+\.\d+\.\d+$' -or
     throw 'HistoryDiana project version and source manifest are not aligned'
 }
 
+if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+    $OutputRoot = Join-Path $publishRoot "HistoryDiana-v$version"
+}
+else {
+    $OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
+    if ($OutputRoot.TrimEnd('\') -eq [IO.Path]::GetFullPath($publishRoot).TrimEnd('\')) {
+        $OutputRoot = Join-Path $publishRoot "HistoryDiana-v$version"
+    }
+}
+$repoPrefix = $repoRoot.TrimEnd('\') + '\'
+$tempPrefix = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+if (-not ($OutputRoot.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+          $OutputRoot.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase))) {
+    throw "OutputRoot must remain inside the HistoryDiana project or the process temp directory: $OutputRoot"
+}
+
 New-Item -ItemType Directory -Force -Path $transactionRoot, $backup, $OutputRoot | Out-Null
 & dotnet build $projectPath -c $Configuration -p:NuGetAudit=false "-p:HistoryVulcanPackageRoot=$historyVulcanRoot"
 if ($LASTEXITCODE -ne 0) {
@@ -128,9 +134,28 @@ try {
         (Join-Path $stage 'SHA256SUMS'),
         $checksumLines,
         [Text.UTF8Encoding]::new($false))
-    Assert-ModulePackage $stage $version
+        Assert-ModulePackage $stage $version
 
-    $movedPrevious = [Collections.Generic.List[string]]::new()
+        $historyRoot = Join-Path $publishRoot 'history'
+        New-Item -ItemType Directory -Force -Path $historyRoot | Out-Null
+        $legacyNames = @('HistoryDiana.dll', 'HistoryDiana.xml', 'module.manifest.json', 'SHA256SUMS', 'docs')
+        $legacyEntries = @($legacyNames | ForEach-Object {
+            $path = Join-Path $publishRoot $_
+            if (Test-Path -LiteralPath $path) { Get-Item -LiteralPath $path }
+        })
+        if ($legacyEntries.Count -gt 0) {
+            $legacyArchive = Join-Path $historyRoot ("HistoryDiana-v{0}-flat-{1}" -f $version, (Get-Date -Format 'yyyyMMddHHmmss'))
+            New-Item -ItemType Directory -Force -Path $legacyArchive | Out-Null
+            foreach ($entry in $legacyEntries) {
+                Move-Item -LiteralPath $entry.FullName -Destination $legacyArchive
+            }
+        }
+        foreach ($candidate in @(Get-ChildItem -LiteralPath $publishRoot -Directory -Force -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '^HistoryDiana-v\d+\.\d+\.\d+$' -and $_.FullName -ne $OutputRoot })) {
+            Move-Item -LiteralPath $candidate.FullName -Destination $historyRoot
+        }
+
+        $movedPrevious = [Collections.Generic.List[string]]::new()
     $movedCandidate = [Collections.Generic.List[string]]::new()
     try {
         foreach ($item in @(Get-ChildItem -LiteralPath $OutputRoot -Force |
