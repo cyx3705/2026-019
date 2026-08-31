@@ -1,9 +1,10 @@
-# HistoryDiana — OneHistory 的 AI 工作区
+# HistoryDiana — OneHistory 的 AI 工具区
 
-HistoryDiana 是 OneHistory 的 **AI 侧常驻工作区**：前端图形查看、项目巡检、小工具、MCP 中继和 z 文档通道。
-模块开发闭环已迁到宿主 `vulcan.dev.*`。
+HistoryDiana 是 OneHistory 的 **AI 工具区**：统一承接面向 AI 的跨项目观察、巡检、读取、转换和工具中继能力。
+当前工具包括前端图形查看、项目巡检、小工具、MCP 中继和 z 文档通道；后续新增的 AI 通用工具也默认归 Diana。
 
-与 HistoryMercury 对称——Mercury 是人的翻译官，Diana 是 AI 的翻译官（巡检、中继和文档通道）。
+业务模块仍拥有自己的领域能力，Diana 通过中继帮助 AI 发现和调用，不复制领域实现。唯一例外是已经冻结的
+模块开发管线：`vulcan.dev.start/submit/finish` 继续由 HistoryVulcan 拥有，只走 Console CLI，不进入 Diana 或 MCP。
 Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulcan 前端。
 
 ![OneHistory Logo](./Logo.png)
@@ -19,9 +20,10 @@ Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulca
 
 ## 从这里开始
 
-1. 要开发模块，读宿主《模块开发手册》，走 `vulcan.dev.start` → `vulcan.dev.submit` →
-   `vulcan.dev.finish`；宿主自身禁止走这三条。
+1. AI 需要通用工具时，先从 `diana.*` 查找；新能力若不属于某个业务模块的领域合同，默认在 Diana 实现。
 2. 需要跨项目说明书时，先执行 `diana.docs.catalog`，把索引留在对话中，再读取对应 z 通道。
+3. 只有开发模块时例外：读宿主《模块开发手册》，通过 Console CLI 走
+   `vulcan.dev.start` → `vulcan.dev.submit` → `vulcan.dev.finish`；宿主自身禁止走这三条。
 
 ## 指令
 
@@ -31,7 +33,7 @@ Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulca
 | 类 | 指令 | 用途 |
 | --- | --- | --- |
 | `project` | `diana.project.summary` / `recent` / `largest` | 已登记工作树的只读巡检 |
-| `project` | `diana.project.manifest` / `docs` / `align` | 四个模块项目的 manifest、现行文档与对齐检查 |
+| `project` | `diana.project.manifest` / `docs` / `align` | 当前已实现范围内四个项目的 manifest、现行文档与对齐检查 |
 | `kit` | `diana.kit.sha256` / `base64` / `guid` / `now` | 无副作用的小计算 |
 | `relay` | `diana.relay.list` / `describe` / `call` | 按当前 MCP 策略实时列举与调用工具 |
 | `docs` | `diana.docs.catalog` | 现场扫描全部 z 通道 |
@@ -55,8 +57,8 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 当前源码版本为 `2.3.0`，适配 HistoryVulcan `5.1.2`。
 
-## 集中发布
+## 开发管线例外
 
-已登记 `HistoryDiana`、`HistoryJanus`、`HistoryMercury`、`HistoryMinerva`（Kind=module）；
-`HistoryVulcan` 是发布器内置的 Kind=host 特例。登记表位于宿主仓
-`2026-023-HistoryVulcan/b-Code-HistoryVulcan/eng/pipeline/module-publish.manifest.json`。
+Diana 不拥有发布器，也不登记 `diana.worktree.*`、`diana.release.*` 或 `diana.trial.*`。
+已冻结的模块开发管线及 z 写入由 HistoryVulcan 独占；当前登记的模块包括 `HistoryDiana`、
+`HistoryJanus`、`HistoryMercury`、`HistoryMinerva`、`HistoryAurora` 和 `HistoryPortunus`。

@@ -1,4 +1,4 @@
-# AI 工作合同
+# HistoryDiana AI 工具区工作合同
 
 本文件适用于整个仓库。进入项目后先执行只读检查，再根据用户任务决定是否修改。
 
@@ -26,6 +26,10 @@
 
 ## 工作边界
 
+- Diana 是 OneHistory 面向 AI 的通用工具归属区。新增跨项目观察、巡检、读取、转换或工具编排能力时，
+  默认在 Diana 落地；业务领域能力仍归对应模块，Diana 不复制其实现。
+- 唯一基础设施例外是 HistoryVulcan 已冻结的 `vulcan.dev.start/submit/finish` 模块开发管线。
+  它只走 Console CLI，不得迁回 Diana，也不得通过 MCP 或 `diana.relay.call` 执行。
 - 修改前后检查 Git 状态，保留用户已有改动，不回退无关文件。
 - 默认不扫描 `b-Office/history/`、`z-Publish/`、生成目录或大型二进制文件。
 - 不直接编辑生成物、正式发布快照、归档和第三方依赖；应修改其权威源并按既定流程生成。
