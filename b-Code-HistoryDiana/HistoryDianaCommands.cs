@@ -10,6 +10,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
     private static readonly HashSet<string> GeneratedDirectories = new(StringComparer.OrdinalIgnoreCase)
     {
         ".vs", ".pio", "bin", "obj", "TestResults", "node_modules", "Library", "Temp", "Logs", "UserSettings",
+        "z-Publish", "artifacts",
     };
 
     private readonly Func<string> _projectLibraryRoot;

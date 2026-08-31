@@ -18,6 +18,8 @@ try
     var worktreeDirectory = Path.Combine(temporaryRoot, projectName);
     Directory.CreateDirectory(Path.Combine(worktreeDirectory, ".git"));
     File.WriteAllText(Path.Combine(worktreeDirectory, "sample.txt"), "HistoryDiana smoke test");
+    Directory.CreateDirectory(Path.Combine(worktreeDirectory, "z-Publish"));
+    File.WriteAllText(Path.Combine(worktreeDirectory, "z-Publish", "generated.bin"), new string('x', 4096));
 
     var endpointPath = Path.Combine(temporaryRoot, "endpoint.json");
     File.WriteAllText(endpointPath, "{\"port\":59095,\"accessToken\":\"smoke-token\"}");
@@ -81,6 +83,9 @@ try
     while (Encoding.UTF8.GetByteCount(changelog.ToString()) <= 12 * 1024)
         changelog.Append("padding-line-to-force-outline\n");
     File.WriteAllText(changelogPath, changelog.ToString());
+    var manyHeadingsPath = Path.Combine(channelPackage, "docs", "章节很多.md");
+    File.WriteAllText(manyHeadingsPath, string.Join('\n',
+        Enumerable.Range(1, 60).Select(index => $"## 章节 {index}\nbody")));
     var channelManifestPath = Path.Combine(channelPackage, "module.manifest.json");
     File.WriteAllText(channelManifestPath,
         """
@@ -89,6 +94,7 @@ try
     File.WriteAllText(Path.Combine(channelPackage, "SHA256SUMS"), string.Join(Environment.NewLine,
         $"{Hash(apiPath)}  docs/模块API.md",
         $"{Hash(changelogPath)}  docs/变更摘要.md",
+        $"{Hash(manyHeadingsPath)}  docs/章节很多.md",
         $"{Hash(channelManifestPath)}  module.manifest.json") + Environment.NewLine);
 
     var invalidPackage = Path.Combine(
@@ -189,6 +195,13 @@ try
     var largest = await bus.ExecuteAsync($"diana.project.largest name={projectName} minMb=0", "smoke");
     True(summary.Success && recent.Success && largest.Success, "项目巡检命令执行");
     True(summary.Data is not null && recent.Data is not null && largest.Data is not null, "项目巡检返回结构化结果");
+    True(!JsonSerializer.Serialize(largest.Data).Contains("generated.bin", StringComparison.Ordinal),
+        "默认巡检必须排除 z-Publish 生成目录");
+    var largestWithGenerated = await bus.ExecuteAsync(
+        $"diana.project.largest name={projectName} minMb=0 includeGenerated=true", "smoke");
+    True(largestWithGenerated.Success
+         && JsonSerializer.Serialize(largestWithGenerated.Data).Contains("generated.bin", StringComparison.Ordinal),
+        "includeGenerated=true 必须显式纳入 z-Publish");
     var invalidProject = await bus.ExecuteAsync("diana.project.summary name=..", "smoke");
     True(!invalidProject.Success && invalidProject.Message.Contains("单一目录名", StringComparison.Ordinal),
         "项目巡检必须返回可修正的参数错误");
@@ -216,6 +229,12 @@ try
     True(versionSlice.Success && versionSlice.Message.Contains("first-item", StringComparison.Ordinal), "按版本读取");
     True(!versionSlice.Message.Contains("other-item", StringComparison.Ordinal), "版本读取不得带入其他版本");
     True(!(await bus.ExecuteAsync("diana.docs.read domain=janus file=../secret.md", "smoke")).Success, "文档路径不得越界");
+    var missingHeading = await bus.ExecuteAsync(
+        "diana.docs.read domain=janus file=docs/章节很多.md heading=不存在", "smoke");
+    True(!missingHeading.Success
+         && missingHeading.Message.Contains("前 20/60 项", StringComparison.Ordinal)
+         && missingHeading.Message.Length < 2048,
+        "无效 heading 的建议必须限长并指向完整目录");
 
     var externalDocument = Path.Combine(temporaryRoot, "outside.md");
     var linkedDocument = Path.Combine(channelPackage, "docs", "linked.md");

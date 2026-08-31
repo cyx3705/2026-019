@@ -14,6 +14,7 @@ internal static class DianaZDocCommands
 {
     private const int MaximumDocumentBytes = 512 * 1024;
     private const int OutlineWithoutHeadingBytes = 12 * 1024;
+    private const int MaximumErrorSuggestions = 20;
     private static readonly Regex VersionToken = new(@"^\d+\.\d+\.\d+\b", RegexOptions.CultureInvariant);
     private static readonly HashSet<string> DocumentExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -115,11 +116,7 @@ internal static class DianaZDocCommands
             {
                 var headings = ListHeadings(markdown);
                 var versions = ListVersions(markdown);
-                var available = headings.Count == 0
-                    ? "没有 Markdown 标题"
-                    : $"可用章节: {string.Join("、", headings)}";
-                if (versions.Count > 0)
-                    available += $"。可用版本: {string.Join("、", versions)}";
+                var available = RenderErrorSuggestions(headings, versions);
                 return CommandResult.Fail($"{document.Path} 没有标题或版本「{headingValue}」。{available}");
             }
 
@@ -221,6 +218,33 @@ internal static class DianaZDocCommands
         }
 
         return versions;
+    }
+
+    private static string RenderErrorSuggestions(
+        IReadOnlyList<string> headings,
+        IReadOnlyList<string> versions)
+    {
+        var parts = new List<string>();
+        if (headings.Count == 0)
+        {
+            parts.Add("没有 Markdown 标题");
+        }
+        else
+        {
+            parts.Add(RenderSuggestionGroup("可用章节", headings));
+        }
+
+        if (versions.Count > 0)
+            parts.Add(RenderSuggestionGroup("可用版本", versions));
+        parts.Add("省略 heading 可获取完整目录");
+        return string.Join("。", parts);
+    }
+
+    private static string RenderSuggestionGroup(string label, IReadOnlyList<string> values)
+    {
+        var shown = values.Take(MaximumErrorSuggestions).ToList();
+        var count = values.Count > shown.Count ? $"（前 {shown.Count}/{values.Count} 项）" : "";
+        return $"{label}{count}: {string.Join("、", shown)}";
     }
 
     private static string? ExtractHeading(string markdown, string heading)
