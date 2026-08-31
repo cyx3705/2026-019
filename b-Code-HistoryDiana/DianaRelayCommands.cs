@@ -35,7 +35,7 @@ internal static class DianaRelayCommands
                 Text("filter", "按工具名或描述包含匹配；留空不过滤", position: 0),
                 Bool("modulesonly", "true 只返回模块工具，false 返回全部可见工具", "true"),
             ],
-            Handler = async context =>
+            Handler = context => DianaCommandGuard.RunAsync(async () =>
             {
                 var filter = (context.GetString("filter") ?? "").Trim();
                 var modulesOnly = context.GetBool("modulesonly", true);
@@ -65,7 +65,7 @@ internal static class DianaRelayCommands
                 foreach (var tool in ordered)
                     text.Append($"\n  {tool.Name}");
                 return CommandResult.Ok(text.ToString(), new { Count = ordered.Count, Tools = ordered });
-            },
+            }),
         });
 
         registry.Register(new CommandDescriptor
@@ -77,7 +77,7 @@ internal static class DianaRelayCommands
             Example = "diana.relay.describe name=vulcan_command_list",
             Readonly = true,
             Parameters = [Text("name", "MCP 工具名", required: true, position: 0)],
-            Handler = async context =>
+            Handler = context => DianaCommandGuard.RunAsync(async () =>
             {
                 var name = RequireToolName(context.RequireString("name"));
                 using var client = clientFactory();
@@ -87,7 +87,7 @@ internal static class DianaRelayCommands
                 return tool == null
                     ? CommandResult.Fail($"当前 MCP 策略下没有可见工具: {name}")
                     : CommandResult.Ok(tool.Name, tool);
-            },
+            }),
         });
 
         registry.Register(new CommandDescriptor
@@ -102,7 +102,7 @@ internal static class DianaRelayCommands
                 Text("name", "MCP 工具名", required: true, position: 0),
                 Text("argumentsjson", "JSON 对象字符串，默认空对象，最大 64 KiB", position: 1),
             ],
-            Handler = async context =>
+            Handler = context => DianaCommandGuard.RunAsync(async () =>
             {
                 var name = RequireToolName(context.RequireString("name"));
                 // 自调用会形成中继环，直接拒绝。
@@ -146,7 +146,7 @@ internal static class DianaRelayCommands
                 }
 
                 return CommandResult.Ok(target.Name, new { Tool = target.Name, Result = result });
-            },
+            }),
         });
     }
 

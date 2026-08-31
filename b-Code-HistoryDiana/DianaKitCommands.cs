@@ -62,7 +62,8 @@ internal static class DianaKitCommands
             Example = example,
             Readonly = true,
             Parameters = parameters,
-            Handler = CommandDescriptor.Sync(context => CommandResult.Ok(data: handler(context))),
+            Handler = CommandDescriptor.Sync(context =>
+                DianaCommandGuard.Run(() => CommandResult.Ok(data: handler(context)))),
         };
 
     private static ParameterSpec Text(string name, string description, bool required = false, int? position = null)
