@@ -75,14 +75,14 @@ public sealed class HistoryDianaCommands : IModuleContextAware
                 Int("top", "格式和一级目录统计最多返回多少项，范围 1~50", "10"),
             ],
             Readonly = true,
-            Handler = CommandDescriptor.Sync(context =>
+            Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {
                 var result = Summary(
                     context.RequireString("name"),
                     context.GetBool("includeGenerated"),
                     context.GetInt("top", 10));
                 return CommandResult.Ok($"已汇总 {result.Project}: {result.Files} 个文件，{result.Size}", result);
-            }),
+            })),
         });
 
         registry.Register(new CommandDescriptor
@@ -100,7 +100,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
                 Bool("includeGenerated", "是否包含 bin、obj、.vs、node_modules 等生成目录", "false"),
             ],
             Readonly = true,
-            Handler = CommandDescriptor.Sync(context =>
+            Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {
                 var result = Recent(
                     context.RequireString("name"),
@@ -108,7 +108,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
                     context.GetInt("limit", 30),
                     context.GetBool("includeGenerated"));
                 return CommandResult.Ok($"已找到 {result.Count} 个最近修改文件", result);
-            }),
+            })),
         });
 
         registry.Register(new CommandDescriptor
@@ -126,7 +126,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
                 Bool("includeGenerated", "是否包含 bin、obj、.vs、node_modules 等生成目录", "false"),
             ],
             Readonly = true,
-            Handler = CommandDescriptor.Sync(context =>
+            Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {
                 var result = Largest(
                     context.RequireString("name"),
@@ -134,7 +134,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
                     context.GetDouble("minMb", 1),
                     context.GetBool("includeGenerated"));
                 return CommandResult.Ok($"已找到 {result.Count} 个大文件", result);
-            }),
+            })),
         });
     }
 

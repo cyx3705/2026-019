@@ -31,11 +31,11 @@ internal static class DianaProjectAlignmentCommands
             Example = "diana.project.manifest name=2026-020-HistoryJanus",
             Readonly = true,
             Parameters = [Text("name", "已登记工作树名称", required: true, position: 0)],
-            Handler = CommandDescriptor.Sync(context =>
+            Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {
                 var project = ReadManifest(resolveProject(context.RequireString("name")));
                 return CommandResult.Ok(project.Name, project);
-            }),
+            })),
         });
 
         registry.Register(new CommandDescriptor
@@ -51,7 +51,7 @@ internal static class DianaProjectAlignmentCommands
                 Text("name", "已登记工作树名称", required: true, position: 0),
                 Text("kind", "文档类型：overview、technicalContract、decisions、verification", "overview", position: 1),
             ],
-            Handler = CommandDescriptor.Sync(context =>
+            Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {
                 var root = resolveProject(context.RequireString("name"));
                 var manifest = ReadManifest(root);
@@ -75,7 +75,7 @@ internal static class DianaProjectAlignmentCommands
                     Path = relativePath,
                     Content = File.ReadAllText(path),
                 });
-            }),
+            })),
         });
 
         registry.Register(new CommandDescriptor
@@ -86,7 +86,7 @@ internal static class DianaProjectAlignmentCommands
             Summary = "检查 Janus、Mercury、Minerva、Vulcan 四个项目的 manifest 与文档入口对齐状态",
             Example = "diana.project.align",
             Readonly = true,
-            Handler = CommandDescriptor.Sync(_ =>
+            Handler = CommandDescriptor.Sync(_ => DianaCommandGuard.Run(() =>
             {
                 var results = AlignedProjects.Select(name => AlignOne(name, resolveProject)).ToList();
                 var passed = results.Count(item => item.Aligned);
@@ -97,7 +97,7 @@ internal static class DianaProjectAlignmentCommands
                     Total = results.Count,
                     Projects = results,
                 });
-            }),
+            })),
         });
     }
 

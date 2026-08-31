@@ -26,11 +26,11 @@ internal static class DianaViewCommands
             Summary = "列出可供 AI 图形查看器捕获的 HistoryVulcan 前端窗口",
             Example = "diana.view.windows",
             Readonly = true,
-            Handler = CommandDescriptor.Sync(_ =>
+            Handler = CommandDescriptor.Sync(_ => DianaCommandGuard.Run(() =>
             {
                 var windows = DianaWindowCapture.ListWindows();
                 return CommandResult.Ok($"找到 {windows.Count} 个可捕获的 HistoryVulcan 前端窗口", windows);
-            }),
+            })),
         });
 
         registry.Register(new CommandDescriptor
@@ -51,14 +51,14 @@ internal static class DianaViewCommands
                     Position = 0,
                 },
             ],
-            Handler = CommandDescriptor.Sync(context =>
+            Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {
                 var handle = ParseHandle(context.GetString("handle"));
                 var capture = DianaWindowCapture.Capture(handle);
                 return CommandResult.Ok(
                     $"已捕获 {capture.Title}: {capture.Width}x{capture.Height} PNG，SHA-256 {capture.Sha256}",
                     capture);
-            }),
+            })),
         });
     }
 

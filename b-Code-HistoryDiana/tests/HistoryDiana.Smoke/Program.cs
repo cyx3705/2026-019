@@ -189,8 +189,14 @@ try
     var largest = await bus.ExecuteAsync($"diana.project.largest name={projectName} minMb=0", "smoke");
     True(summary.Success && recent.Success && largest.Success, "项目巡检命令执行");
     True(summary.Data is not null && recent.Data is not null && largest.Data is not null, "项目巡检返回结构化结果");
+    var invalidProject = await bus.ExecuteAsync("diana.project.summary name=..", "smoke");
+    True(!invalidProject.Success && invalidProject.Message.Contains("单一目录名", StringComparison.Ordinal),
+        "项目巡检必须返回可修正的参数错误");
     True(!(await bus.ExecuteAsync($"diana.project.manifest name={projectName}", "smoke")).Success,
         "缺 manifest 的项目必须明确失败");
+    var invalidHandle = await bus.ExecuteAsync("diana.view.capture handle=invalid", "smoke");
+    True(!invalidHandle.Success && invalidHandle.Message.Contains("handle 必须", StringComparison.Ordinal),
+        "图形查看器必须返回可修正的句柄错误");
 
     var catalog = await bus.ExecuteAsync("diana.docs.catalog", "smoke");
     True(catalog.Success && catalog.Message.Contains("diana.docs.read domain=janus", StringComparison.Ordinal),

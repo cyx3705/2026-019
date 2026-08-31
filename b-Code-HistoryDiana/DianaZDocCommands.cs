@@ -33,11 +33,11 @@ internal static class DianaZDocCommands
             Summary = "列出全部 z 文档通道与文件名；跨项目读文档前必须先执行本命令，把索引留在对话里",
             Example = "diana.docs.catalog",
             Readonly = true,
-            Handler = CommandDescriptor.Sync(_ =>
+            Handler = CommandDescriptor.Sync(_ => DianaCommandGuard.Run(() =>
             {
                 var snapshot = Discover(projectLibraryRoot);
                 return CommandResult.Ok(RenderCatalog(snapshot), snapshot);
-            }),
+            })),
         });
 
         registry.Register(new CommandDescriptor
@@ -69,11 +69,11 @@ internal static class DianaZDocCommands
                     Description = "只返回该 Markdown 标题的一节，或 x.y.z 版本条目；长文应带上以免整篇进对话",
                 },
             ],
-            Handler = CommandDescriptor.Sync(context => OpenChannel(
+            Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() => OpenChannel(
                 projectLibraryRoot,
                 context.RequireString("domain"),
                 context.GetString("file"),
-                context.GetString("heading"))),
+                context.GetString("heading")))),
         });
     }
 

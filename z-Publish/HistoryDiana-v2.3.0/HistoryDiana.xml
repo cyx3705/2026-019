@@ -4,6 +4,9 @@
         <name>HistoryDiana</name>
     </assembly>
     <members>
+        <member name="T:HistoryDiana.DianaCommandGuard">
+            <summary>Preserves actionable module errors across the host command boundary.</summary>
+        </member>
         <member name="T:HistoryDiana.DianaKitCommands">
             <summary>
             小工具集：哈希、编码、标识与时间。都是无副作用的一行计算，合并为一个 <c>kit</c> 类
