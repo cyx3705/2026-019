@@ -109,7 +109,7 @@ internal static class DianaProjectAlignmentCommands
             var manifest = ReadManifest(root);
             var documents = new[] { manifest.Overview, manifest.TechnicalContract, manifest.Decisions, manifest.Verification };
             var documentStates = documents.Select(path => new DocumentState(path, File.Exists(ResolveDeclaredFile(root, path)))).ToList();
-            var aligned = manifest.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
+            var aligned = MatchesProjectIdentity(name, manifest.Name)
                           && manifest.SourceRoots.Count > 0
                           && documentStates.All(item => item.Exists);
             return new AlignmentResult(name, aligned, manifest.Name, manifest.Version, documentStates, null);
@@ -118,6 +118,13 @@ internal static class DianaProjectAlignmentCommands
         {
             return new AlignmentResult(name, false, null, null, [], ex.Message);
         }
+    }
+
+    internal static bool MatchesProjectIdentity(string projectDirectory, string manifestName)
+    {
+        var marker = projectDirectory.IndexOf("-History", StringComparison.OrdinalIgnoreCase);
+        var expected = marker >= 0 ? projectDirectory[(marker + 1)..] : projectDirectory;
+        return expected.Equals(manifestName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ProjectManifest ReadManifest(string root)

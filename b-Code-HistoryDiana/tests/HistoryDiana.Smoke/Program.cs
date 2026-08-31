@@ -64,6 +64,13 @@ try
         True(moduleTools.SetEquals(["diana_view_windows"]), "模块命令名必须映射为当前 MCP 工具名");
     }
 
+    True(DianaProjectAlignmentCommands.MatchesProjectIdentity(
+            "2026-023-HistoryVulcan", "HistoryVulcan"),
+        "对齐检查必须把项目目录身份映射为 manifest 产品名");
+    True(!DianaProjectAlignmentCommands.MatchesProjectIdentity(
+            "2026-023-HistoryVulcan", "HistoryJanus"),
+        "对齐检查必须拒绝不匹配的 manifest 产品名");
+
     var channelPackage = Path.Combine(
         temporaryRoot, "2026-020-HistoryJanus", "z-Publish", "HistoryJanus-v9.9.9");
     Directory.CreateDirectory(Path.Combine(channelPackage, "docs"));
