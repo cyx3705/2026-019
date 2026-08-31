@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "type": "HistoryVulcan.Module",
+  "name": "HistoryDiana",
+  "version": "2.3.0",
+  "description": "OneHistory AI 工具区：前端图形查看、项目巡检、文档与 MCP 中继。",
+  "artifact": "HistoryDiana.dll",
+  "docs": "HistoryDiana.xml",
+  "mcpExposure": "standard",
+  "ui": false
+}
