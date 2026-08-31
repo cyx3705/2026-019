@@ -1,10 +1,10 @@
 # HistoryDiana — OneHistory 的 AI 工作区
 
-HistoryDiana 是 OneHistory 的 **AI 侧常驻工作区**：项目巡检、小工具、MCP 中继和 z 文档通道。
+HistoryDiana 是 OneHistory 的 **AI 侧常驻工作区**：前端图形查看、项目巡检、小工具、MCP 中继和 z 文档通道。
 模块开发闭环已迁到宿主 `vulcan.dev.*`。
 
 与 HistoryMercury 对称——Mercury 是人的翻译官，Diana 是 AI 的翻译官（巡检、中继和文档通道）。
-Diana 不提供 UI 页面。
+Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulcan 前端。
 
 ![OneHistory Logo](./Logo.png)
 
@@ -25,8 +25,8 @@ Diana 不提供 UI 页面。
 
 ## 指令
 
-四类。文档查看使用固定的 `diana.docs.read`，每次按现场 z 动态解析模块域。
-唯一 `standard` 写命令是 `diana.relay.call`。
+五类。文档查看使用固定的 `diana.docs.read`，每次按现场 z 动态解析模块域。
+`standard` 写命令是 `diana.relay.call` 与写入运行态 PNG 的 `diana.view.capture`。
 
 | 类 | 指令 | 用途 |
 | --- | --- | --- |
@@ -36,6 +36,8 @@ Diana 不提供 UI 页面。
 | `relay` | `diana.relay.list` / `describe` / `call` | 按当前 MCP 策略实时列举与调用工具 |
 | `docs` | `diana.docs.catalog` | 现场扫描全部 z 通道 |
 | `docs` | `diana.docs.read domain=<域>` | 按当前 z 快照读取任意模块文档 |
+| `view` | `diana.view.windows` | 列出可捕获的 HistoryVulcan 前端窗口 |
+| `view` | `diana.view.capture [handle=]` | 原尺寸捕获前端客户区，返回 PNG 路径、尺寸、哈希和像素统计 |
 
 ## 构建与验证
 
@@ -49,9 +51,9 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 ## 部署
 
-宿主只扫描 `%AppData%\HistoryVulcan\Modules`。正式候选由宿主模块开发管线提交；本轮不执行提交、安装或热重载。
+宿主只扫描 `%AppData%\HistoryVulcan\Modules`。候选提交、安装与热重载统一由宿主模块开发管线执行。
 
-当前源码版本为 `2.2.4`，适配 HistoryVulcan `5.1.2`。
+当前源码版本为 `2.3.0`，适配 HistoryVulcan `5.1.2`。
 
 ## 集中发布
 
