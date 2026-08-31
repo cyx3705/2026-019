@@ -73,8 +73,7 @@ internal sealed class OhsmcpClient : IDisposable
 
     public async Task<IReadOnlySet<string>> ListVisibleModuleToolNamesAsync()
     {
-        var arguments = new JsonObject { ["mcp"] = "visible" };
-        var result = await CallToolCoreAsync("vulcan_command_list", arguments).ConfigureAwait(false);
+        var result = await CallToolCoreAsync("vulcan_command_list", new JsonObject()).ConfigureAwait(false);
         if (result.TryGetProperty("isError", out var errorElement)
             && errorElement.ValueKind == JsonValueKind.True)
         {
@@ -124,7 +123,7 @@ internal sealed class OhsmcpClient : IDisposable
     /// 从 command_list 的行数组提取模块工具名。structuredContent 优先路径与
     /// content 回退路径共用本函数,确保两条路径解析逻辑不漂移。
     /// </summary>
-    private static bool TryReadModuleNames(JsonElement rows, out IReadOnlySet<string> names)
+    internal static bool TryReadModuleNames(JsonElement rows, out IReadOnlySet<string> names)
     {
         if (rows.ValueKind != JsonValueKind.Array)
         {
@@ -140,7 +139,9 @@ internal sealed class OhsmcpClient : IDisposable
                 : null;
             var toolName = row.TryGetProperty("McpToolName", out var toolElement)
                 ? toolElement.GetString()
-                : null;
+                : row.TryGetProperty("CommandName", out var commandElement)
+                    ? commandElement.GetString()?.Replace('.', '_').ToLowerInvariant()
+                    : null;
             if (source != null
                 && source.Equals("module", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(toolName))

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Windows.Media.Imaging;
 using BaseVariable;
 using HistoryDiana;
@@ -20,17 +21,47 @@ try
 
     var endpointPath = Path.Combine(temporaryRoot, "endpoint.json");
     File.WriteAllText(endpointPath, "{\"port\":59095,\"accessToken\":\"smoke-token\"}");
+    var mcpConfigPath = Path.Combine(temporaryRoot, "mcp.json");
     var previousEndpoint = Environment.GetEnvironmentVariable("HISTORYVULCAN_ENDPOINT");
+    var previousMcpConfig = Environment.GetEnvironmentVariable("HISTORYVULCAN_MCP_CONFIG");
     Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", endpointPath);
     try
     {
         var endpoint = DianaRuntime.ReadMcpEndpoint();
         Equal("http://127.0.0.1:59095/mcp", endpoint.Uri.ToString(), "MCP endpoint URI");
         Equal("smoke-token", endpoint.AccessToken, "MCP endpoint token");
+
+        Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", null);
+        Environment.SetEnvironmentVariable("HISTORYVULCAN_MCP_CONFIG", mcpConfigPath);
+        File.WriteAllText(mcpConfigPath,
+            "{\"mcpServers\":{\"history-vulcan\":{\"url\":\"http://127.0.0.1:8777/mcp\"}}}");
+        endpoint = DianaRuntime.ReadMcpEndpoint();
+        Equal("http://127.0.0.1:8777/mcp", endpoint.Uri.ToString(), "Cursor MCP config URI");
+        Equal<string?>(null, endpoint.AccessToken, "本机 MCP 不持券");
+
+        File.WriteAllText(mcpConfigPath,
+            "{\"mcpServers\":{\"history-vulcan\":{\"url\":\"https://example.com/mcp\"}}}");
+        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(), "MCP 端点必须限制为本机回环");
+
+        File.WriteAllText(mcpConfigPath,
+            "{\"mcpServers\":{\"history-vulcan\":{\"url\":8777}}}");
+        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(), "MCP URL 类型错误必须明确失败");
+
+        Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", "https://127.0.0.1:8777/mcp");
+        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(), "显式 MCP URL 也必须拒绝 HTTPS");
     }
     finally
     {
         Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", previousEndpoint);
+        Environment.SetEnvironmentVariable("HISTORYVULCAN_MCP_CONFIG", previousMcpConfig);
+    }
+
+    using (var rows = JsonDocument.Parse(
+               "[{\"CommandName\":\"diana.view.windows\",\"Source\":\"module\"}," +
+               "{\"CommandName\":\"vulcan.command.list\",\"Source\":\"framework:service\"}]"))
+    {
+        True(OhsmcpClient.TryReadModuleNames(rows.RootElement, out var moduleTools), "模块工具目录必须可解析");
+        True(moduleTools.SetEquals(["diana_view_windows"]), "模块命令名必须映射为当前 MCP 工具名");
     }
 
     var channelPackage = Path.Combine(
@@ -43,13 +74,36 @@ try
     while (Encoding.UTF8.GetByteCount(changelog.ToString()) <= 12 * 1024)
         changelog.Append("padding-line-to-force-outline\n");
     File.WriteAllText(changelogPath, changelog.ToString());
-    File.WriteAllText(Path.Combine(channelPackage, "module.manifest.json"),
+    var channelManifestPath = Path.Combine(channelPackage, "module.manifest.json");
+    File.WriteAllText(channelManifestPath,
         """
         {"schemaVersion":1,"type":"HistoryVulcan.Module","name":"HistoryJanus","version":"9.9.9","artifact":"HistoryJanus.dll","ui":false}
         """);
     File.WriteAllText(Path.Combine(channelPackage, "SHA256SUMS"), string.Join(Environment.NewLine,
         $"{Hash(apiPath)}  docs/模块API.md",
-        $"{Hash(changelogPath)}  docs/变更摘要.md") + Environment.NewLine);
+        $"{Hash(changelogPath)}  docs/变更摘要.md",
+        $"{Hash(channelManifestPath)}  module.manifest.json") + Environment.NewLine);
+
+    var invalidPackage = Path.Combine(
+        temporaryRoot, "2026-998-HistoryBroken", "z-Publish", "HistoryBroken-v1.0.0");
+    Directory.CreateDirectory(Path.Combine(invalidPackage, "docs"));
+    var invalidDocumentPath = Path.Combine(invalidPackage, "docs", "不应出现.md");
+    var invalidManifestPath = Path.Combine(invalidPackage, "module.manifest.json");
+    File.WriteAllText(invalidDocumentPath, "# invalid package");
+    File.WriteAllText(invalidManifestPath, "{invalid-json");
+    File.WriteAllText(Path.Combine(invalidPackage, "SHA256SUMS"), string.Join(Environment.NewLine,
+        $"{Hash(invalidDocumentPath)}  docs/不应出现.md",
+        $"{Hash(invalidManifestPath)}  module.manifest.json") + Environment.NewLine);
+
+    var unsignedPackage = Path.Combine(
+        temporaryRoot, "2026-997-HistoryUnsigned", "z-Publish", "HistoryUnsigned-v1.0.0");
+    Directory.CreateDirectory(Path.Combine(unsignedPackage, "docs"));
+    var unsignedDocumentPath = Path.Combine(unsignedPackage, "docs", "不应出现.md");
+    File.WriteAllText(unsignedDocumentPath, "# unsigned manifest");
+    File.WriteAllText(Path.Combine(unsignedPackage, "module.manifest.json"),
+        "{\"name\":\"HistoryUnsigned\",\"version\":\"1.0.0\"}");
+    File.WriteAllText(Path.Combine(unsignedPackage, "SHA256SUMS"),
+        $"{Hash(unsignedDocumentPath)}  docs/不应出现.md{Environment.NewLine}");
 
     var registry = new CommandRegistry();
     var log = new TestLog();
@@ -134,6 +188,8 @@ try
     var catalog = await bus.ExecuteAsync("diana.docs.catalog", "smoke");
     True(catalog.Success && catalog.Message.Contains("diana.docs.read domain=janus", StringComparison.Ordinal),
         "catalog 必须列出版本化候选通道");
+    True(!catalog.Message.Contains("domain=broken", StringComparison.Ordinal), "manifest 损坏的发布包不得形成文档通道");
+    True(!catalog.Message.Contains("domain=unsigned", StringComparison.Ordinal), "manifest 未受 SHA256SUMS 保护的发布包不得形成文档通道");
     True(catalog.Message.Contains("History*-v*", StringComparison.Ordinal), "catalog 必须说明版本化候选规则");
     True(!catalog.Message.Contains("current", StringComparison.OrdinalIgnoreCase), "catalog 不得引用 current 层");
     var listed = await bus.ExecuteAsync("diana.docs.read domain=janus", "smoke");
@@ -147,6 +203,21 @@ try
     True(versionSlice.Success && versionSlice.Message.Contains("first-item", StringComparison.Ordinal), "按版本读取");
     True(!versionSlice.Message.Contains("other-item", StringComparison.Ordinal), "版本读取不得带入其他版本");
     True(!(await bus.ExecuteAsync("diana.docs.read domain=janus file=../secret.md", "smoke")).Success, "文档路径不得越界");
+
+    var externalDocument = Path.Combine(temporaryRoot, "outside.md");
+    var linkedDocument = Path.Combine(channelPackage, "docs", "linked.md");
+    File.WriteAllText(externalDocument, "outside");
+    try
+    {
+        File.CreateSymbolicLink(linkedDocument, externalDocument);
+        Throws<InvalidOperationException>(
+            () => DianaZDocCommands.ResolveInside(channelPackage, "docs/linked.md"),
+            "文档路径不得通过重解析点越出发布包");
+    }
+    catch (Exception ex) when (ex is UnauthorizedAccessException or PlatformNotSupportedException)
+    {
+        // Some Windows CI accounts cannot create symbolic links; production guard is still compiled.
+    }
 
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
         "程序集不得保留 ProjectPulse 类型");
@@ -178,6 +249,20 @@ static void SequenceEqual<T>(IReadOnlyList<T> expected, IReadOnlyList<T> actual,
 {
     if (!expected.SequenceEqual(actual))
         throw new InvalidOperationException($"{message}: expected={string.Join(',', expected)}, actual={string.Join(',', actual)}");
+}
+
+static void Throws<TException>(Action action, string message) where TException : Exception
+{
+    try
+    {
+        action();
+    }
+    catch (TException)
+    {
+        return;
+    }
+
+    throw new InvalidOperationException(message);
 }
 
 sealed class TestModuleContext(CommandBus bus, CommandRegistry registry) : IModuleContext
