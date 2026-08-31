@@ -64,6 +64,7 @@ try
         .ToList();
     Equal(1, moduleInfos.Count, "程序集只能提供一个模块入口");
     Equal("HistoryDiana", moduleInfos[0].ModuleName, "模块名");
+    True(moduleInfos[0].Description.Contains("前端图形查看", StringComparison.Ordinal), "模块描述必须公开图形查看能力");
     Equal(assembly.GetName().Version?.ToString(3), moduleInfos[0].Version, "模块版本");
     True(moduleInfos[0].MainClassType is null, "命令必须由宿主上下文显式登记");
 
