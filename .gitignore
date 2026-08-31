@@ -23,6 +23,7 @@
 *.user
 *.vsidx
 *.xlk
+~$*.xlsx
 # HistoryJanus baseline end
 # 构建产物不入库
 bin/
