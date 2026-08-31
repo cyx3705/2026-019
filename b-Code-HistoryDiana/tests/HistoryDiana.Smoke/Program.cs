@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Windows.Media.Imaging;
 using BaseVariable;
 using HistoryDiana;
 using HistoryVulcan.Core.Commands;
@@ -75,6 +76,7 @@ try
                  "diana.project.manifest", "diana.project.recent", "diana.project.summary",
                  "diana.relay.call", "diana.relay.describe", "diana.relay.list",
                  "diana.docs.catalog", "diana.docs.read",
+                 "diana.view.capture", "diana.view.windows",
              })
     {
         True(names.Contains(required), $"缺少命令 {required}");
@@ -86,7 +88,7 @@ try
     True(names.All(name => name.StartsWith("diana.", StringComparison.Ordinal)), "命令前缀必须是 diana");
     True(descriptors.All(item => item.Domain == "HistoryDiana"), "命令域必须归属 HistoryDiana");
     SequenceEqual(
-        new[] { "docs", "kit", "project", "relay" },
+        new[] { "docs", "kit", "project", "relay", "view" },
         descriptors.Select(item => item.CommandClass!).Distinct(StringComparer.Ordinal)
             .OrderBy(name => name, StringComparer.Ordinal).ToArray(),
         "Diana 命令类集合");
@@ -96,11 +98,29 @@ try
     var writeCommands = new HashSet<string>(StringComparer.Ordinal)
     {
         "diana.relay.call",
+        "diana.view.capture",
     };
     True(descriptors.Where(item => !writeCommands.Contains(item.Name)).All(item => item.Readonly),
         "白名单以外命令必须只读");
     True(descriptors.Single(item => item.Name == "diana.relay.call").Readonly == false,
-        "relay.call 是唯一写命令");
+        "relay.call 必须是写命令");
+    True(descriptors.Single(item => item.Name == "diana.view.capture").Readonly == false,
+        "view.capture 写入运行态 PNG");
+
+    var windows = await bus.ExecuteAsync("diana.view.windows", "smoke");
+    True(windows.Success && windows.Data is IReadOnlyList<WindowView>, "图形查看器必须安全列出可捕获窗口");
+    var syntheticPng = Path.Combine(temporaryRoot, "viewer-smoke.png");
+    DianaWindowCapture.SavePng(syntheticPng,
+    [
+        0, 0, 0, 0, 255, 255, 255, 0,
+        0, 0, 255, 0, 0, 255, 0, 0,
+    ], 2, 2);
+    using (var stream = File.OpenRead(syntheticPng))
+    {
+        var decoded = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        Equal(2, decoded.Frames[0].PixelWidth, "图形查看器 PNG 宽度");
+        Equal(2, decoded.Frames[0].PixelHeight, "图形查看器 PNG 高度");
+    }
 
     var summary = await bus.ExecuteAsync($"diana.project.summary name={projectName}", "smoke");
     var recent = await bus.ExecuteAsync($"diana.project.recent name={projectName} days=1", "smoke");

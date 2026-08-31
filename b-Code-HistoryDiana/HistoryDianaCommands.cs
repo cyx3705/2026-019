@@ -50,6 +50,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         DianaRelayCommands.Register(registry, _mcpClientFactory);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
         DianaZDocCommands.Register(registry, _projectLibraryRoot);
+        DianaViewCommands.Register(registry);
 
         // 模块开发路线（工作区、发布、装机）已迁往宿主（HistoryVulcan 5.1.2），
         // 指令名从 diana.* 改为 vulcan.dev.*；
