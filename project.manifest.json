@@ -52,6 +52,7 @@
     "package": "b-Office-Diana/package/复用说明.md",
     "overview": "b-Office-Diana/current/项目概览.md",
     "technicalContract": "b-Office-Diana/current/技术合同.md",
+    "consoleLogRequirement": "b-Office-Diana/current/原生控制台日志查看需求书.md",
     "decisions": "b-Office-Diana/current/有效决策.md",
     "verification": "b-Office-Diana/current/验证合同.md"
   },
