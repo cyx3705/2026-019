@@ -60,5 +60,8 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 ## 开发管线例外
 
 Diana 不拥有发布器，也不登记 `diana.worktree.*`、`diana.release.*` 或 `diana.trial.*`。
-已冻结的模块开发管线及 z 写入由 HistoryVulcan 独占；当前登记的模块包括 `HistoryDiana`、
-`HistoryJanus`、`HistoryMercury`、`HistoryMinerva`、`HistoryAurora` 和 `HistoryPortunus`。
+已冻结的模块开发管线及 z 写入由 HistoryVulcan 独占。已登记 `HistoryDiana`、`HistoryJanus`、
+`HistoryMercury`、`HistoryMinerva`、`HistoryAurora`、`HistoryPortunus`（`kind=module`）；
+`HistoryVulcan` 是 `kind=host`，禁止走模块开发管线。
+登记表位于宿主仓 `2026-023-HistoryVulcan/b-Code-Eng/pipeline/module-publish.manifest.json`。
+写入 z 只走 `vulcan.dev.submit` / `finish`（模块）或 `vulcan.release.cycle`（宿主）。本仓不发布。
