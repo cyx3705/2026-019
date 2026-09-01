@@ -143,6 +143,7 @@ try
                  "diana.project.align", "diana.project.docs", "diana.project.largest",
                  "diana.project.manifest", "diana.project.recent", "diana.project.summary",
                  "diana.relay.call", "diana.relay.describe", "diana.relay.list",
+                 "diana.log.read",
                  "diana.docs.catalog", "diana.docs.read",
                  "diana.view.capture", "diana.view.windows",
              })
@@ -156,7 +157,7 @@ try
     True(names.All(name => name.StartsWith("diana.", StringComparison.Ordinal)), "命令前缀必须是 diana");
     True(descriptors.All(item => item.Domain == "HistoryDiana"), "命令域必须归属 HistoryDiana");
     SequenceEqual(
-        new[] { "docs", "kit", "project", "relay", "view" },
+        new[] { "docs", "kit", "log", "project", "relay", "view" },
         descriptors.Select(item => item.CommandClass!).Distinct(StringComparer.Ordinal)
             .OrderBy(name => name, StringComparer.Ordinal).ToArray(),
         "Diana 命令类集合");
@@ -174,6 +175,112 @@ try
         "relay.call 必须是写命令");
     True(descriptors.Single(item => item.Name == "diana.view.capture").Readonly == false,
         "view.capture 写入运行态 PNG");
+    True(descriptors.Single(item => item.Name == "diana.log.read").Readonly,
+        "log.read 必须是只读命令");
+
+    var missingLogProvider = await bus.ExecuteAsync("diana.log.read", "smoke");
+    True(!missingLogProvider.Success
+         && missingLogProvider.Message.Contains("提供者不可用", StringComparison.Ordinal),
+        "Aurora 提供者缺失必须明确失败");
+    True(!(await bus.ExecuteAsync("diana.log.read minlevel=verbose", "smoke")).Success,
+        "非法日志级别必须失败");
+    True(!(await bus.ExecuteAsync("diana.log.read since=not-a-time", "smoke")).Success,
+        "非法 since 必须失败");
+    True(!(await bus.ExecuteAsync("diana.log.read after=-1", "smoke")).Success,
+        "非法 after 必须失败");
+    True(!(await bus.ExecuteAsync("diana.log.read limit=501", "smoke")).Success,
+        "非法 limit 必须失败");
+
+    string? providerMinimumLevel = null;
+    string? providerSource = null;
+    string? providerKeyword = null;
+    long providerAfter = -1;
+    registry.Register(new CommandDescriptor
+    {
+        Name = "aurora.log.snapshot",
+        Domain = "aurora",
+        CommandClass = "log",
+        Summary = "smoke provider",
+        Readonly = true,
+        AllowUnspecifiedParameters = true,
+        Handler = CommandDescriptor.Sync(ctx =>
+        {
+            providerMinimumLevel = ctx.GetString("minlevel");
+            providerSource = ctx.GetString("source");
+            providerKeyword = ctx.GetString("keyword");
+            _ = long.TryParse(ctx.GetString("after"), out providerAfter);
+            if (providerKeyword == "unknown-schema")
+                return CommandResult.Ok(data: JsonSerializer.SerializeToElement(new { schemaVersion = 999 }));
+            if (providerKeyword == "oversized")
+            {
+                return CommandResult.Ok(data: JsonSerializer.SerializeToElement(new
+                {
+                    schemaVersion = 1,
+                    frontendInstanceId = "smoke-front",
+                    capturedAt = DateTimeOffset.Now,
+                    oldestSequence = 1,
+                    newestSequence = 41,
+                    matchedCount = 1,
+                    returnedCount = 1,
+                    truncated = false,
+                    nextAfter = 41,
+                    entries = new[]
+                    {
+                        new
+                        {
+                            sequence = 41,
+                            timestamp = DateTimeOffset.Now,
+                            level = "Error",
+                            source = "shell.chrome",
+                            message = new string('x', 300_000),
+                        },
+                    },
+                }));
+            }
+
+            return CommandResult.Ok(data: JsonSerializer.SerializeToElement(new
+            {
+                schemaVersion = 1,
+                frontendInstanceId = "smoke-front",
+                capturedAt = DateTimeOffset.Now,
+                oldestSequence = 1,
+                newestSequence = 42,
+                matchedCount = 1,
+                returnedCount = 1,
+                truncated = false,
+                nextAfter = 42,
+                entries = new[]
+                {
+                    new
+                    {
+                        sequence = 42,
+                        timestamp = DateTimeOffset.Now,
+                        level = "Error",
+                        source = "shell.chrome",
+                        message = "unique marker\nstack line",
+                    },
+                },
+            }));
+        }),
+    });
+
+    var logRead = await bus.ExecuteAsync(
+        "diana.log.read minlevel=warn source=SHELL.CHROME keyword=\"unique marker\" after=40 limit=2",
+        "smoke");
+    True(logRead.Success && logRead.Data is JsonElement,
+        $"原生控制台日志必须返回结构化结果: {logRead.Message}");
+    Equal("warn", providerMinimumLevel, "最低级别传给生产端");
+    Equal("SHELL.CHROME", providerSource, "来源传给生产端");
+    Equal("unique marker", providerKeyword, "关键字传给生产端");
+    Equal(40L, providerAfter, "after 传给生产端");
+    var logPayload = (JsonElement)logRead.Data!;
+    Equal("smoke-front", logPayload.GetProperty("frontendInstanceId").GetString(), "前端实例 ID");
+    True(logPayload.GetProperty("entries")[0].GetProperty("message").GetString()!.Contains("\nstack line"),
+        "多行异常不得拆分");
+    True(!(await bus.ExecuteAsync("diana.log.read keyword=unknown-schema", "smoke")).Success,
+        "未知提供者结构版本必须失败");
+    True(!(await bus.ExecuteAsync("diana.log.read keyword=oversized", "smoke")).Success,
+        "超过 256 KiB 的提供者结果必须失败");
 
     var windows = await bus.ExecuteAsync("diana.view.windows", "smoke");
     True(windows.Success && windows.Data is IReadOnlyList<WindowView>, "图形查看器必须安全列出可捕获窗口");

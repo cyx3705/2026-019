@@ -49,6 +49,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         // 按类分文件，但注册入口只有这一处。docs 通道按现场 z-* 扫描登记。
         DianaKitCommands.Register(registry);
         DianaRelayCommands.Register(registry, _mcpClientFactory);
+        DianaLogCommands.Register(registry, context.Bus);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
         DianaZDocCommands.Register(registry, _projectLibraryRoot);
         DianaViewCommands.Register(registry);
