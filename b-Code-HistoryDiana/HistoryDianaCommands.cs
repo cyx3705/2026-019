@@ -46,10 +46,13 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         var context = _context
             ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
         // 工具箱的另外两类：kit（哈希/编码/标识/时间）与 relay（MCP 工具中继）。
+        // host 类只转发宿主自己的只读装载状态：vulcan.module.* 整类不投影到 MCP，
+        // 而热重载核对偏偏要读它，见 DianaHostCommands。
         // 按类分文件，但注册入口只有这一处。docs 通道按现场 z-* 扫描登记。
         DianaKitCommands.Register(registry);
         DianaRelayCommands.Register(registry, _mcpClientFactory);
         DianaLogCommands.Register(registry, context.Bus);
+        DianaHostCommands.Register(registry, context.Bus);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
         DianaZDocCommands.Register(registry, _projectLibraryRoot);
         DianaViewCommands.Register(registry);
