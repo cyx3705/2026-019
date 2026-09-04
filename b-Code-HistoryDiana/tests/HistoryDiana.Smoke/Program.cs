@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -144,6 +144,7 @@ try
                  "diana.project.manifest", "diana.project.recent", "diana.project.summary",
                  "diana.relay.call", "diana.relay.describe", "diana.relay.list",
                  "diana.log.read",
+                 "diana.host.modules", "diana.host.ready",
                  "diana.docs.catalog", "diana.docs.read",
                  "diana.view.capture", "diana.view.windows",
              })
@@ -157,7 +158,7 @@ try
     True(names.All(name => name.StartsWith("diana.", StringComparison.Ordinal)), "命令前缀必须是 diana");
     True(descriptors.All(item => item.Domain == "HistoryDiana"), "命令域必须归属 HistoryDiana");
     SequenceEqual(
-        new[] { "docs", "kit", "log", "project", "relay", "view" },
+        new[] { "docs", "host", "kit", "log", "project", "relay", "view" },
         descriptors.Select(item => item.CommandClass!).Distinct(StringComparer.Ordinal)
             .OrderBy(name => name, StringComparer.Ordinal).ToArray(),
         "Diana 命令类集合");
@@ -281,6 +282,81 @@ try
         "未知提供者结构版本必须失败");
     True(!(await bus.ExecuteAsync("diana.log.read keyword=oversized", "smoke")).Success,
         "超过 256 KiB 的提供者结果必须失败");
+
+    True(descriptors.Single(item => item.Name == "diana.host.modules").Readonly,
+        "host.modules 必须是只读命令");
+    True(descriptors.Single(item => item.Name == "diana.host.ready").Readonly,
+        "host.ready 必须是只读命令");
+
+    var missingHostProvider = await bus.ExecuteAsync("diana.host.modules", "smoke");
+    True(!missingHostProvider.Success
+         && missingHostProvider.Message.Contains("没有登记", StringComparison.Ordinal),
+        "宿主未登记 vulcan.module.list 时必须明确失败");
+
+    // 宿主在进程内返回强类型对象且属性名为 PascalCase：转发要同时扛住未序列化和大小写差异。
+    registry.Register(new CommandDescriptor
+    {
+        Name = "vulcan.module.list",
+        Domain = "vulcan",
+        CommandClass = "module",
+        Summary = "smoke host module catalog",
+        Readonly = true,
+        Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(data: new[]
+        {
+            new
+            {
+                ModuleName = "HistoryDiana",
+                Version = "2.5.0",
+                InstanceId = "smoke-instance",
+                CommandCount = 20,
+                Attached = true,
+                Ui = false,
+                AttachFailures = Array.Empty<string>(),
+            },
+            new
+            {
+                ModuleName = "HistoryAurora",
+                Version = "1.17.0",
+                InstanceId = "smoke-aurora",
+                CommandCount = 0,
+                Attached = false,
+                Ui = true,
+                AttachFailures = new[] { "创建 UI 模块 HistoryAurora 失败" },
+            },
+        })),
+    });
+    registry.Register(new CommandDescriptor
+    {
+        Name = "vulcan.module.ready",
+        Domain = "vulcan",
+        CommandClass = "module",
+        Summary = "smoke host readiness",
+        Readonly = true,
+        Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(data: false)),
+    });
+
+    var hostModules = await bus.ExecuteAsync("diana.host.modules", "smoke");
+    True(hostModules.Success, $"宿主装载目录必须可读: {hostModules.Message}");
+    var hostPayload = JsonSerializer.SerializeToElement(hostModules.Data);
+    Equal(2, hostPayload.GetProperty("moduleCount").GetInt32(), "装载模块数");
+    Equal(1, hostPayload.GetProperty("attachedCount").GetInt32(), "已附着模块数");
+    Equal(1, hostPayload.GetProperty("attachFailureCount").GetInt32(), "附着失败条数");
+    True(hostPayload.GetProperty("modules")[1].GetProperty("attachFailures")[0].GetString()!
+            .Contains("创建 UI 模块", StringComparison.Ordinal),
+        "附着失败原文必须原样带回，AI 才不用去翻宿主日志");
+    True(!hostModules.Message.Contains("AppData", StringComparison.OrdinalIgnoreCase),
+        "装载目录不得回显运行槽绝对路径");
+
+    var filteredHost = await bus.ExecuteAsync("diana.host.modules name=historydiana", "smoke");
+    True(filteredHost.Success && filteredHost.Message.Contains("2.5.0", StringComparison.Ordinal),
+        "name 过滤必须大小写不敏感并给出版本与实例");
+    var missingModule = await bus.ExecuteAsync("diana.host.modules name=HistoryGhost", "smoke");
+    True(!missingModule.Success && missingModule.Message.Contains("没有装载", StringComparison.Ordinal),
+        "未装载的模块必须返回可修正的失败");
+
+    var hostReady = await bus.ExecuteAsync("diana.host.ready", "smoke");
+    True(hostReady.Success && hostReady.Message.Contains("尚不完整", StringComparison.Ordinal),
+        "装载未完成时必须说明仍在进行，不得被误读成热重载失败");
 
     var windows = await bus.ExecuteAsync("diana.view.windows", "smoke");
     True(windows.Success && windows.Data is IReadOnlyList<WindowView>, "图形查看器必须安全列出可捕获窗口");

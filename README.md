@@ -17,6 +17,7 @@ Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulca
 | [`AGENTS.md`](./AGENTS.md) | AI 工作合同：读取顺序、真值判定、边界 |
 | [`b-Office-Diana/`](./b-Office-Diana/) | Diana 自身的项目合同 |
 | [`原生控制台日志查看需求书`](./b-Office-Diana/current/原生控制台日志查看需求书.md) | `diana.log.read` 的数据源、接口与验收 |
+| [`模块开发观察手册`](./b-Office-Diana/package/模块开发观察手册.md) | 开发任一模块时，一轮里在哪三处用 Diana 取证 |
 | HistoryVulcan `b-Office/package/模块开发手册.md` | 模块开发工作区、送审和并回流程 |
 
 ## 从这里开始
@@ -28,12 +29,13 @@ Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulca
 
 ## 指令
 
-六类。文档查看使用固定的 `diana.docs.read`，每次按现场 z 动态解析模块域。
+七类。文档查看使用固定的 `diana.docs.read`，每次按现场 z 动态解析模块域。
 `standard` 写命令是 `diana.relay.call` 与写入运行态 PNG 的 `diana.view.capture`。
 
 | 类 | 指令 | 用途 |
 | --- | --- | --- |
 | `log` | `diana.log.read` | 读取当前前端控制台内存日志；默认只返回 Error/Fatal |
+| `host` | `diana.host.modules` / `ready` | 只读转发活宿主装载状态：版本、实例 ID、指令数、附着失败 |
 | `project` | `diana.project.summary` / `recent` / `largest` | 已登记工作树的只读巡检 |
 | `project` | `diana.project.manifest` / `docs` / `align` | 当前已实现范围内四个项目的 manifest、现行文档与对齐检查 |
 | `kit` | `diana.kit.sha256` / `base64` / `guid` / `now` | 无副作用的小计算 |
@@ -57,7 +59,7 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 宿主只扫描 `%AppData%\HistoryVulcan\Modules`。候选提交、安装与热重载统一由宿主模块开发管线执行。
 
-当前源码版本为 `2.4.0`，适配 HistoryVulcan `5.1.2`。
+当前源码版本为 `2.5.0`，适配 HistoryVulcan `5.1.2`。
 
 ## 开发管线例外
 
