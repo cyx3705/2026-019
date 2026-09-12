@@ -49,7 +49,7 @@
   },
   "documents": {
     "center": "b-Office-Diana/文档中心.md",
-    "package": "b-Office-Diana/package/复用说明.md",
+    "package": "b-Office-Diana/package/模块API.md",
     "developmentObservation": "b-Office-Diana/package/模块开发观察手册.md",
     "overview": "b-Office-Diana/current/项目概览.md",
     "technicalContract": "b-Office-Diana/current/技术合同.md",
