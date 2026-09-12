@@ -50,7 +50,7 @@ $positioningDocuments = @(
     'b-Office-Diana/current/有效决策.md',
     'b-Office-Diana/current/验证合同.md',
     'b-Office-Diana/文档中心.md',
-    'b-Office-Diana/package/复用说明.md'
+    'b-Office-Diana/package/模块API.md'
 )
 foreach ($relativePath in $positioningDocuments) {
     $content = Get-Content -LiteralPath (Join-Path $repoRoot $relativePath) -Raw -Encoding UTF8
@@ -64,7 +64,7 @@ $pipelineBoundaryDocuments = @(
     'AGENTS.md',
     'b-Office-Diana/current/项目概览.md',
     'b-Office-Diana/current/技术合同.md',
-    'b-Office-Diana/package/复用说明.md'
+    'b-Office-Diana/package/模块API.md'
 )
 foreach ($relativePath in $pipelineBoundaryDocuments) {
     $content = Get-Content -LiteralPath (Join-Path $repoRoot $relativePath) -Raw -Encoding UTF8
@@ -78,7 +78,7 @@ $currentPositioningText = @(
     'b-Office-Diana/current/项目概览.md',
     'b-Office-Diana/current/技术合同.md',
     'b-Office-Diana/current/验证合同.md',
-    'b-Office-Diana/package/复用说明.md'
+    'b-Office-Diana/package/模块API.md'
 ) | ForEach-Object {
     Get-Content -LiteralPath (Join-Path $repoRoot $_) -Raw -Encoding UTF8
 }
