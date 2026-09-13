@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -120,7 +120,7 @@ internal static class DianaZDocCommands
                 return CommandResult.Fail($"{document.Path} 没有标题或版本「{headingValue}」。{available}");
             }
 
-            return CommandResult.Ok(section, new
+            return CommandResult.Ok($"已读取 {channel.Id}/{document.Path} 章节「{headingValue}」；正文见 data.Content", new
             {
                 channel.Id,
                 channel.Module,
@@ -147,7 +147,7 @@ internal static class DianaZDocCommands
             });
         }
 
-        return CommandResult.Ok(markdown, new
+        return CommandResult.Ok($"已读取 {channel.Id}/{document.Path}；正文见 data.Content", new
         {
             channel.Id,
             channel.Module,
@@ -628,9 +628,9 @@ internal static class DianaZDocCommands
     private static string RenderCatalog(IReadOnlyList<ZDocChannel> channels)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 5.1.2 宿主为平铺 host，现场读取 SHA256SUMS）");
+        builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 宿主清单位于 z-Publish 根，运行文件在 host/，现场读取 SHA256SUMS）");
         builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用 diana.docs.read domain=<通道>。省略 file 只列出该通道。");
-        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 5.1.2），否则只返回目录。");
+        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号，否则只返回目录。");
         builder.AppendLine("diana.docs.read 每次按当前 z 快照解析通道；新增模块无需新增或重载 Diana 命令。");
         if (channels.Count == 0)
         {

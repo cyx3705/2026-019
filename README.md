@@ -35,15 +35,17 @@ Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulca
 | 类 | 指令 | 用途 |
 | --- | --- | --- |
 | `log` | `diana.log.read` | 读取当前前端控制台内存日志；默认只返回 Error/Fatal |
-| `host` | `diana.host.modules` / `ready` | 只读转发活宿主装载状态：版本、实例 ID、指令数、附着失败 |
+| `host` | `diana.host.modules` / `ready` / `observe` | 只读转发活宿主装载状态：版本、实例 ID、指令数、附着失败 |
 | `project` | `diana.project.summary` / `recent` / `largest` | 已登记工作树的只读巡检 |
-| `project` | `diana.project.manifest` / `docs` / `align` | 当前已实现范围内四个项目的 manifest、现行文档与对齐检查 |
+| `project` | `diana.project.manifest` / `docs` / `align` | 已授权项目的 manifest 与现行文档；动态发现项目入口并检查对齐 |
 | `kit` | `diana.kit.sha256` / `base64` / `guid` / `now` | 无副作用的小计算 |
 | `relay` | `diana.relay.list` / `describe` / `call` | 按当前 MCP 策略实时列举与调用工具 |
 | `docs` | `diana.docs.catalog` | 现场扫描全部 z 通道 |
 | `docs` | `diana.docs.read domain=<域>` | 按当前 z 快照读取任意模块文档 |
 | `view` | `diana.view.windows` | 列出可捕获的 HistoryVulcan 前端窗口 |
 | `view` | `diana.view.capture [handle=]` | 原尺寸捕获前端客户区，返回 PNG 路径、尺寸、哈希和像素统计 |
+
+2.6.0 新增只读 `diana.host.observe name=<模块> [baseline=<上次返回的令牌>]`，汇总模块、就绪与日志并比较基线。文档正文只在 Data.Content 保留；MCP 协议层的结构化数据兼容副本由网关负责。跨项目消费始终使用 `diana.docs.catalog/read`，`project.docs` 仅用于已授权的项目维护。
 
 ## 构建与验证
 
@@ -59,7 +61,7 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 宿主只扫描 `%AppData%\HistoryVulcan\Modules`。候选提交、安装与热重载统一由宿主模块开发管线执行。
 
-当前源码版本为 `2.5.0`，适配 HistoryVulcan `5.1.2`。
+当前源码版本为 `2.6.0`，适配 HistoryVulcan `5.1.2`。
 
 ## 开发管线例外
 

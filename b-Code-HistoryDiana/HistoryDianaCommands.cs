@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using HistoryVulcan.Core.Commands;
 using HistoryVulcan.Core.Modules;
 
@@ -53,7 +53,8 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         DianaRelayCommands.Register(registry, _mcpClientFactory);
         DianaLogCommands.Register(registry, context.Bus);
         DianaHostCommands.Register(registry, context.Bus);
-        DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _));
+        DianaObservationCommands.Register(registry, context.Bus);
+        DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _), () => Directory.EnumerateDirectories(_projectLibraryRoot()).Where(path => (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0 && IsGitProject(path) && File.Exists(Path.Combine(path, "project.manifest.json"))).Select(path => Path.GetFileName(path)));
         DianaZDocCommands.Register(registry, _projectLibraryRoot);
         DianaViewCommands.Register(registry);
 

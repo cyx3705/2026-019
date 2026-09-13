@@ -9,15 +9,8 @@ namespace HistoryDiana;
 internal static class DianaProjectAlignmentCommands
 {
     private const int MaximumDocumentBytes = 512 * 1024;
-    private static readonly string[] AlignedProjects =
-    [
-        "2026-020-HistoryJanus",
-        "2026-021-HistoryMercury",
-        "2026-024-HistoryMinerva",
-        "2026-023-HistoryVulcan",
-    ];
 
-    public static void Register(CommandRegistry registry, Func<string, string> resolveProject)
+    public static void Register(CommandRegistry registry, Func<string, string> resolveProject, Func<IEnumerable<string>> projectNames)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(resolveProject);
@@ -43,7 +36,7 @@ internal static class DianaProjectAlignmentCommands
             Name = "diana.project.docs",
             Domain = "HistoryDiana",
             CommandClass = "project",
-            Summary = "按项目 manifest 读取现行概览、技术、决策或验证文档",
+            Summary = "维护已授权项目时按 manifest 读取现行文档；跨项目消费必须用 diana.docs.catalog/read",
             Example = "diana.project.docs name=2026-020-HistoryJanus kind=overview",
             Readonly = true,
             Parameters =
@@ -83,16 +76,19 @@ internal static class DianaProjectAlignmentCommands
             Name = "diana.project.align",
             Domain = "HistoryDiana",
             CommandClass = "project",
-            Summary = "检查 Janus、Mercury、Minerva、Vulcan 四个项目的 manifest 与文档入口对齐状态",
+            Summary = "检查已登记项目的 manifest 与文档入口；省略 name 动态列举项目库，仅检查入口存在性",
             Example = "diana.project.align",
             Readonly = true,
-            Handler = CommandDescriptor.Sync(_ => DianaCommandGuard.Run(() =>
+            Parameters = [Text("name", "只检查该已登记项目；省略则检查库根所有带 manifest 的 Git 项目")],
+            Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {
-                var results = AlignedProjects.Select(name => AlignOne(name, resolveProject)).ToList();
+                var selected = context.GetString("name");
+                var names = string.IsNullOrWhiteSpace(selected) ? projectNames().OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray() : new[] { selected.Trim() };
+                var results = names.Select(name => AlignOne(name, resolveProject)).ToList();
                 var passed = results.Count(item => item.Aligned);
-                return CommandResult.Ok($"四项目对齐检查：{passed}/{results.Count} 通过", new
+                return CommandResult.Ok($"项目入口对齐检查：{passed}/{results.Count} 通过", new
                 {
-                    ExpectedProjects = AlignedProjects,
+                    ExpectedProjects = names,
                     Passed = passed,
                     Total = results.Count,
                     Projects = results,

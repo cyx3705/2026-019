@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -144,7 +144,7 @@ try
                  "diana.project.manifest", "diana.project.recent", "diana.project.summary",
                  "diana.relay.call", "diana.relay.describe", "diana.relay.list",
                  "diana.log.read",
-                 "diana.host.modules", "diana.host.ready",
+                 "diana.host.modules", "diana.host.ready", "diana.host.observe",
                  "diana.docs.catalog", "diana.docs.read",
                  "diana.view.capture", "diana.view.windows",
              })
@@ -245,7 +245,7 @@ try
                 frontendInstanceId = "smoke-front",
                 capturedAt = DateTimeOffset.Now,
                 oldestSequence = 1,
-                newestSequence = 42,
+                newestSequence = 50,
                 matchedCount = 1,
                 returnedCount = 1,
                 truncated = false,
@@ -358,6 +358,7 @@ try
     True(hostReady.Success && hostReady.Message.Contains("尚不完整", StringComparison.Ordinal),
         "装载未完成时必须说明仍在进行，不得被误读成热重载失败");
 
+    await ObservationTests.Run(bus, registry);
     var windows = await bus.ExecuteAsync("diana.view.windows", "smoke");
     True(windows.Success && windows.Data is IReadOnlyList<WindowView>, "图形查看器必须安全列出可捕获窗口");
     var syntheticPng = Path.Combine(temporaryRoot, "viewer-smoke.png");
@@ -390,6 +391,12 @@ try
         "项目巡检必须返回可修正的参数错误");
     True(!(await bus.ExecuteAsync($"diana.project.manifest name={projectName}", "smoke")).Success,
         "缺 manifest 的项目必须明确失败");
+    File.WriteAllText(Path.Combine(worktreeDirectory, "project.manifest.json"), "{}");
+    var dynamicAlign = await bus.ExecuteAsync("diana.project.align", "smoke");
+    True(dynamicAlign.Success && JsonSerializer.SerializeToElement(dynamicAlign.Data).GetProperty("ExpectedProjects")
+        .EnumerateArray().Any(item => item.GetString() == projectName), "新增项目自动进入对齐检查，损坏 manifest 作为失败行返回");
+    var selectedAlign = await bus.ExecuteAsync($"diana.project.align name={projectName}", "smoke");
+    Equal(1, JsonSerializer.SerializeToElement(selectedAlign.Data).GetProperty("Total").GetInt32(), "name 只检查目标项目");
     var invalidHandle = await bus.ExecuteAsync("diana.view.capture handle=invalid", "smoke");
     True(!invalidHandle.Success && invalidHandle.Message.Contains("handle 必须", StringComparison.Ordinal),
         "图形查看器必须返回可修正的句柄错误");
@@ -404,13 +411,14 @@ try
     var listed = await bus.ExecuteAsync("diana.docs.read domain=janus", "smoke");
     True(listed.Success && listed.Message.Contains("docs/模块API.md", StringComparison.Ordinal), "文档通道列举");
     var opened = await bus.ExecuteAsync("diana.docs.read domain=janus file=模块API.md heading=命令", "smoke");
-    True(opened.Success && opened.Message.Contains("command-body", StringComparison.Ordinal), "文档按节读取");
-    True(!opened.Message.Contains("window-body", StringComparison.Ordinal), "按节读取不得越界");
+    True(opened.Success && JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("command-body", StringComparison.Ordinal), "文档按节读取");
+    True(!JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("window-body", StringComparison.Ordinal), "按节读取不得越界");
+    True(!opened.Message.Contains("command-body", StringComparison.Ordinal), "正文只保留在 Data 中");
     var outline = await bus.ExecuteAsync("diana.docs.read domain=janus file=docs/变更摘要.md", "smoke");
     True(outline.Success && outline.Message.Contains("版本:", StringComparison.Ordinal), "长文默认返回目录");
     var versionSlice = await bus.ExecuteAsync("diana.docs.read domain=janus file=变更摘要.md heading=9.9.9", "smoke");
-    True(versionSlice.Success && versionSlice.Message.Contains("first-item", StringComparison.Ordinal), "按版本读取");
-    True(!versionSlice.Message.Contains("other-item", StringComparison.Ordinal), "版本读取不得带入其他版本");
+    True(versionSlice.Success && JsonSerializer.SerializeToElement(versionSlice.Data).GetProperty("Content").GetString()!.Contains("first-item", StringComparison.Ordinal), "按版本读取");
+    True(!JsonSerializer.SerializeToElement(versionSlice.Data).GetProperty("Content").GetString()!.Contains("other-item", StringComparison.Ordinal), "版本读取不得带入其他版本");
     True(!(await bus.ExecuteAsync("diana.docs.read domain=janus file=../secret.md", "smoke")).Success, "文档路径不得越界");
     var missingHeading = await bus.ExecuteAsync(
         "diana.docs.read domain=janus file=docs/章节很多.md heading=不存在", "smoke");
