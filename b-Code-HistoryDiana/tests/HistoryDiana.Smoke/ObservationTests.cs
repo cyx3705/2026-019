@@ -10,6 +10,19 @@ internal static class ObservationTests
         {
             if (!condition) throw new InvalidOperationException(message);
         }
+        var originalArguments = JsonSerializer.Serialize(new { name = "HistoryDiana", text = "中文\nC:\\folder\\file", literal = "\\u0022" });
+        var transportArguments = JsonSerializer.Serialize(originalArguments)[1..^1];
+        Check(DianaRelayCommands.ParseArguments(originalArguments).ToJsonString()
+            == DianaRelayCommands.ParseArguments(transportArguments).ToJsonString(), "兼容一层传输转义且不破坏 Unicode、换行与字面反斜杠");
+        var slashQuotes = "{\\\"name\\\":\\\"HistoryDiana\\\"}";
+        Check(DianaRelayCommands.ParseArguments(slashQuotes)["name"]!.GetValue<string>() == "HistoryDiana", "兼容反斜杠引号");
+        foreach (var invalidJson in new[] { "[]", "null", "{broken}", new string('x', 65537) })
+        {
+            var rejected = false;
+            try { DianaRelayCommands.ParseArguments(invalidJson); }
+            catch (JsonException) { rejected = true; }
+            Check(rejected, "非对象、损坏或超长 JSON 仍须拒绝");
+        }
         var missingRegistry = new CommandRegistry();
         var missingBus = new CommandBus(missingRegistry, new TestLog());
         DianaObservationCommands.Register(missingRegistry, missingBus);

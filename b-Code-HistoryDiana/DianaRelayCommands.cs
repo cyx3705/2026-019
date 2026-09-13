@@ -120,8 +120,7 @@ internal static class DianaRelayCommands
                 JsonObject arguments;
                 try
                 {
-                    arguments = JsonNode.Parse(argumentsJson) as JsonObject
-                                ?? throw new JsonException("必须是单个 JSON 对象");
+                    arguments = ParseArguments(argumentsJson);
                 }
                 catch (JsonException ex)
                 {
@@ -148,6 +147,24 @@ internal static class DianaRelayCommands
                 return CommandResult.Ok(target.Name, new { Tool = target.Name, Result = result });
             }),
         });
+    }
+
+    internal static JsonObject ParseArguments(string value)
+    {
+        if (Encoding.UTF8.GetByteCount(value) > MaximumArgumentsBytes)
+            throw new JsonException("argumentsjson 超过 64 KiB 上限");
+        try
+        {
+            return JsonNode.Parse(value) as JsonObject ?? throw new JsonException("必须是单个 JSON 对象");
+        }
+        catch (JsonException) when (value.TrimStart().StartsWith("{\\u0022", StringComparison.Ordinal)
+                                   || value.TrimStart().StartsWith("{\\\"", StringComparison.Ordinal))
+        {
+            // Some clients preserve one JSON string-escaping layer at the command boundary.
+            // Decode exactly once, only after ordinary object parsing failed. Valid JSON stays untouched.
+            var decoded = JsonSerializer.Deserialize<string>("\"" + value + "\"");
+            return JsonNode.Parse(decoded!) as JsonObject ?? throw new JsonException("必须是单个 JSON 对象");
+        }
     }
 
     private static string? FirstText(JsonElement result)
