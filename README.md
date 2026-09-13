@@ -45,7 +45,7 @@ Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulca
 | `view` | `diana.view.windows` | 列出可捕获的 HistoryVulcan 前端窗口 |
 | `view` | `diana.view.capture [handle=]` | 原尺寸捕获前端客户区，返回 PNG 路径、尺寸、哈希和像素统计 |
 
-2.6.0 新增只读 `diana.host.observe name=<模块> [baseline=<上次返回的令牌>]`，汇总模块、就绪与日志并比较基线。文档正文只在 Data.Content 保留；MCP 协议层的结构化数据兼容副本由网关负责。跨项目消费始终使用 `diana.docs.catalog/read`，`project.docs` 仅用于已授权的项目维护。
+2.6.1 新增只读 `diana.host.observe name=<模块> [baseline=<上次返回的令牌>]`，汇总模块、就绪与日志并比较基线。文档正文只在 Data.Content 保留；MCP 协议层的结构化数据兼容副本由网关负责。跨项目消费始终使用 `diana.docs.catalog/read`，`project.docs` 仅用于已授权的项目维护。
 
 ## 构建与验证
 
@@ -61,7 +61,7 @@ dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana
 
 宿主只扫描 `%AppData%\HistoryVulcan\Modules`。候选提交、安装与热重载统一由宿主模块开发管线执行。
 
-当前源码版本为 `2.6.0`，适配 HistoryVulcan `5.1.2`。
+当前源码版本为 `2.6.1`，适配 HistoryVulcan `5.1.2`。
 
 ## 开发管线例外
 

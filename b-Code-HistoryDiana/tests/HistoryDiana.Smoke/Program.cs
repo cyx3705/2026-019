@@ -77,7 +77,7 @@ try
         temporaryRoot, "2026-020-HistoryJanus", "z-Publish", "HistoryJanus-v9.9.9");
     Directory.CreateDirectory(Path.Combine(channelPackage, "docs"));
     var apiPath = Path.Combine(channelPackage, "docs", "模块API.md");
-    File.WriteAllText(apiPath, "# Janus API\nintro\n## 命令\ncommand-body\n## 窗口\nwindow-body\n");
+    File.WriteAllText(apiPath, "# Janus API\nintro\n## 命令\ncommand-body\n````ps\n# A. 检查\n```\n# 仍在代码块\n````\n~~~\n## 示例标题\n~~~\nend-command-body\n## 窗口\nwindow-body\n");
     var changelogPath = Path.Combine(channelPackage, "docs", "变更摘要.md");
     var changelog = new StringBuilder("# 变更\n## 主要变化\n- 9.9.9 first-item\n  continued-line\n- 9.9.8 other-item\n## 附录\n");
     while (Encoding.UTF8.GetByteCount(changelog.ToString()) <= 12 * 1024)
@@ -426,6 +426,10 @@ try
     True(opened.Success && JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("command-body", StringComparison.Ordinal), "文档按节读取");
     True(!JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("window-body", StringComparison.Ordinal), "按节读取不得越界");
     True(!opened.Message.Contains("command-body", StringComparison.Ordinal), "正文只保留在 Data 中");
+    True(JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("end-command-body", StringComparison.Ordinal),
+        "反引号及波浪号围栏中的标题不得截断章节，短围栏不得提前闭合");
+    var codeHeading = await bus.ExecuteAsync("diana.docs.read domain=janus file=模块API.md heading=示例标题", "smoke");
+    True(!codeHeading.Success && !codeHeading.Message.Contains("示例标题、", StringComparison.Ordinal), "代码块标题不得可选或进入目录");
     var outline = await bus.ExecuteAsync("diana.docs.read domain=janus file=docs/变更摘要.md", "smoke");
     True(outline.Success && outline.Message.Contains("版本:", StringComparison.Ordinal), "长文默认返回目录");
     var versionSlice = await bus.ExecuteAsync("diana.docs.read domain=janus file=变更摘要.md heading=9.9.9", "smoke");

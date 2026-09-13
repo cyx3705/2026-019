@@ -192,8 +192,10 @@ internal static class DianaZDocCommands
     private static IReadOnlyList<string> ListHeadings(string markdown)
     {
         var headings = new List<string>();
+        var fence = new MarkdownFence();
         foreach (var raw in markdown.Replace("\r\n", "\n").Split('\n'))
         {
+            if (fence.IsCode(raw)) continue;
             if (!TryReadHeading(raw, out _, out var title) || title.Length == 0)
                 continue;
             headings.Add(title);
@@ -205,8 +207,10 @@ internal static class DianaZDocCommands
     private static IReadOnlyList<string> ListVersions(string markdown)
     {
         var versions = new List<string>();
+        var fence = new MarkdownFence();
         foreach (var raw in markdown.Replace("\r\n", "\n").Split('\n'))
         {
+            if (fence.IsCode(raw)) continue;
             string? version = null;
             if (TryReadVersionBullet(raw, out var bulletVersion))
                 version = bulletVersion;
@@ -252,8 +256,10 @@ internal static class DianaZDocCommands
         var lines = markdown.Replace("\r\n", "\n").Split('\n');
         var start = -1;
         var startLevel = 0;
+        var fence = new MarkdownFence();
         for (var i = 0; i < lines.Length; i++)
         {
+            if (fence.IsCode(lines[i])) continue;
             if (!TryReadHeading(lines[i], out var level, out var title))
                 continue;
             if (start < 0)
@@ -294,15 +300,43 @@ internal static class DianaZDocCommands
 
         var collected = new List<string>();
         var capturing = false;
+        var fence = new MarkdownFence();
         foreach (var line in lines)
         {
-            if (TryReadVersionBullet(line, out var itemVersion))
+            if (!fence.IsCode(line) && TryReadVersionBullet(line, out var itemVersion))
                 capturing = itemVersion.Equals(heading, StringComparison.Ordinal);
             if (capturing)
                 collected.Add(line);
         }
 
         return collected.Count == 0 ? null : string.Join('\n', collected).TrimEnd();
+    }
+
+    // Fenced examples can contain # comments and version bullets. They are body,
+    // never document structure; keep their original lines in extracted sections.
+    private sealed class MarkdownFence
+    {
+        private char _marker;
+        private int _length;
+
+        public bool IsCode(string line)
+        {
+            var text = line.AsSpan().TrimStart();
+            var indent = line.Length - text.Length;
+            var run = 0;
+            if (indent <= 3 && text.Length > 0 && text[0] is '`' or '~')
+                while (run < text.Length && text[run] == text[0]) run++;
+            if (_length > 0)
+            {
+                if (run >= _length && text[0] == _marker && text[run..].Trim().IsEmpty)
+                    _length = 0;
+                return true;
+            }
+            if (run < 3 || (text[0] == '`' && text[run..].Contains('`'))) return false;
+            _marker = text[0];
+            _length = run;
+            return true;
+        }
     }
 
     private static bool TryReadVersionBullet(string line, out string version)

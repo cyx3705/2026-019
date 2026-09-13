@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <HistoryDianaVersion>2.6.0</HistoryDianaVersion>
+    <HistoryDianaVersion>2.6.1</HistoryDianaVersion>
     <!-- Vulcan 5.0 收窄 IModuleContext；Diana 通过自身运行时解析器读取项目根和 MCP 端点。 -->
     <MinimumHistoryVulcanVersion>5.1.2</MinimumHistoryVulcanVersion>
     <VersionPrefix>$(HistoryDianaVersion)</VersionPrefix>
