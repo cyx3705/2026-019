@@ -60,7 +60,7 @@ internal static class DianaRelayCommands
                     .Select(tool => new { tool.Name, tool.Description })
                     .ToList();
                 var text = new StringBuilder(
-                    "Cursor 会话里的工具表可能过期。以本列表为准；没有的工具用 diana.relay.call / describe。\n");
+                    "AI 会话里的工具表可能过期。以本列表为准；没有的工具用 diana.relay.call / describe。\n");
                 text.Append($"可见工具 {ordered.Count} 个");
                 foreach (var tool in ordered)
                     text.Append($"\n  {tool.Name}");
@@ -74,7 +74,7 @@ internal static class DianaRelayCommands
             Domain = "HistoryDiana",
             CommandClass = "relay",
             Summary = "查看一个当前可见 MCP 工具的描述与 JSON Schema",
-            Example = "diana.relay.describe name=vulcan_command_list",
+            Example = "diana.relay.describe name=diana_host_modules",
             Readonly = true,
             Parameters = [Text("name", "MCP 工具名", required: true, position: 0)],
             Handler = context => DianaCommandGuard.RunAsync(async () =>
@@ -96,7 +96,7 @@ internal static class DianaRelayCommands
             Domain = "HistoryDiana",
             CommandClass = "relay",
             Summary = "按当前 MCP 工具目录调用一个工具，不依赖会话里的旧快照",
-            Example = "diana.relay.call name=vulcan_worktree_list argumentsjson={\"project\":\"2026-023-HistoryVulcan\"}",
+            Example = "diana.relay.call name=diana_host_modules argumentsjson={\"name\":\"HistoryDiana\"}",
             Parameters =
             [
                 Text("name", "MCP 工具名", required: true, position: 0),
@@ -120,8 +120,7 @@ internal static class DianaRelayCommands
                 JsonObject arguments;
                 try
                 {
-                    arguments = JsonNode.Parse(argumentsJson) as JsonObject
-                                ?? throw new JsonException("必须是单个 JSON 对象");
+                    arguments = ParseArguments(argumentsJson);
                 }
                 catch (JsonException ex)
                 {
@@ -148,6 +147,24 @@ internal static class DianaRelayCommands
                 return CommandResult.Ok(target.Name, new { Tool = target.Name, Result = result });
             }),
         });
+    }
+
+    internal static JsonObject ParseArguments(string value)
+    {
+        if (Encoding.UTF8.GetByteCount(value) > MaximumArgumentsBytes)
+            throw new JsonException("argumentsjson 超过 64 KiB 上限");
+        try
+        {
+            return JsonNode.Parse(value) as JsonObject ?? throw new JsonException("必须是单个 JSON 对象");
+        }
+        catch (JsonException) when (value.TrimStart().StartsWith("{\\u0022", StringComparison.Ordinal)
+                                   || value.TrimStart().StartsWith("{\\\"", StringComparison.Ordinal))
+        {
+            // Some clients preserve one JSON string-escaping layer at the command boundary.
+            // Decode exactly once, only after ordinary object parsing failed. Valid JSON stays untouched.
+            var decoded = JsonSerializer.Deserialize<string>("\"" + value + "\"");
+            return JsonNode.Parse(decoded!) as JsonObject ?? throw new JsonException("必须是单个 JSON 对象");
+        }
     }
 
     private static string? FirstText(JsonElement result)
