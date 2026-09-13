@@ -40,6 +40,8 @@ internal static class ObservationTests
         var second = await bus.ExecuteAsync("diana.host.observe name=HistoryDiana baseline=" + token, "smoke");
         Check(second.Success, second.Message);
         var comparison = JsonSerializer.SerializeToElement(second.Data);
+        Check(second.Message.Contains("新增错误 1 条", StringComparison.Ordinal) && comparison.GetProperty("errorCount").GetInt32() == 1,
+            "错误必须出现在摘要，不能被 issues 为空掩盖");
         Check(!comparison.GetProperty("comparison").GetProperty("instanceChanged").GetBoolean(), "相同实例不能报重载");
         Check(comparison.GetProperty("pipeline").GetProperty("status").GetString() == "unavailable", "不可把 ready 当作管线进度");
         Check(!(await bus.ExecuteAsync("diana.host.observe name=HistoryDiana baseline=invalid", "smoke")).Success, "坏基线拒绝");

@@ -100,21 +100,28 @@ internal static class DianaObservationCommands
                 bool? instanceChanged = oldTarget != null && target != null
                     && oldTarget.InstanceId.Length > 0 && target.InstanceId.Length > 0
                     ? oldTarget.InstanceId != target.InstanceId : null;
-                return CommandResult.Ok($"{name} 观察{(baseline == null ? "基线" : "对比")}；{issues.Count} 项提示，管线完成仍须核对 CLI 回执", new
-                {
-                    schemaVersion = 1,
-                    capturedAt = DateTimeOffset.Now,
-                    atomic = false,
-                    target = name,
-                    ready = ready.Data,
-                    modules = modules.Data,
-                    baselineToken = token,
-                    comparison = baseline == null ? null : new { instanceChanged, changes, frontendChanged },
-                    logs = baseline == null ? log.Data : errors,
-                    logsComplete,
-                    issues,
-                    pipeline = new { status = "unavailable", reason = "当前只读接口不提供 submit/finish 阶段、等待原因或完成状态；核对 Console CLI 回执，卡住时按宿主手册查看宿主日志。不要停宿主。" },
-                });
+                var observedLogs = baseline == null ? log.Data : errors;
+                int? errorCount = observedLogs?.GetProperty("matchedCount").GetInt32();
+                int? regressionCount = changes?.Count(item => item.Regression);
+                var errorLabel = baseline == null ? "历史错误" : "新增错误";
+                return CommandResult.Ok($"{name} 观察{(baseline == null ? "基线" : "对比")}；{errorLabel} {errorCount?.ToString() ?? "未知"} 条，"
+                    + $"模块退化 {regressionCount?.ToString() ?? "未比较"}，证据完整性提示 {issues.Count} 项；管线完成仍须核对 CLI 回执", new
+                    {
+                        schemaVersion = 1,
+                        capturedAt = DateTimeOffset.Now,
+                        atomic = false,
+                        target = name,
+                        ready = ready.Data,
+                        modules = modules.Data,
+                        baselineToken = token,
+                        comparison = baseline == null ? null : new { instanceChanged, changes, frontendChanged },
+                        logs = baseline == null ? log.Data : errors,
+                        logsComplete,
+                        errorCount,
+                        regressionCount,
+                        issues,
+                        pipeline = new { status = "unavailable", reason = "当前只读接口不提供 submit/finish 阶段、等待原因或完成状态；核对 Console CLI 回执，卡住时按宿主手册查看宿主日志。不要停宿主。" },
+                    });
             }),
         });
     }
