@@ -179,6 +179,18 @@ try
     True(descriptors.Single(item => item.Name == "diana.log.read").Readonly,
         "log.read 必须是只读命令");
 
+    // The text tools must preserve real Unicode and literal escape sequences as distinct inputs.
+    foreach (var input in new[] { "hello", "中文", @"\u4E2D\u6587", "line1\nline2\"quoted\"" })
+    {
+        var base64 = await bus.ExecuteAsync("diana.kit.base64 text=" + CommandParser.QuoteArg(input), "smoke");
+        True(base64.Success, base64.Message);
+        Equal(Convert.ToBase64String(Encoding.UTF8.GetBytes(input)), base64.Data as string, "总线 Base64 必须保留原始文本");
+        var digest = await bus.ExecuteAsync("diana.kit.sha256 text=" + CommandParser.QuoteArg(input), "smoke");
+        True(digest.Success, digest.Message);
+        Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input))), digest.Data as string,
+            "总线 SHA256 必须保留原始文本");
+    }
+
     var missingLogProvider = await bus.ExecuteAsync("diana.log.read", "smoke");
     True(!missingLogProvider.Success
          && missingLogProvider.Message.Contains("提供者不可用", StringComparison.Ordinal),
