@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -120,7 +120,7 @@ internal static class DianaZDocCommands
                 return CommandResult.Fail($"{document.Path} 没有标题或版本「{headingValue}」。{available}");
             }
 
-            return CommandResult.Ok(section, new
+            return CommandResult.Ok($"已读取 {channel.Id}/{document.Path} 章节「{headingValue}」；正文见 data.Content", new
             {
                 channel.Id,
                 channel.Module,
@@ -147,7 +147,7 @@ internal static class DianaZDocCommands
             });
         }
 
-        return CommandResult.Ok(markdown, new
+        return CommandResult.Ok($"已读取 {channel.Id}/{document.Path}；正文见 data.Content", new
         {
             channel.Id,
             channel.Module,
@@ -192,8 +192,10 @@ internal static class DianaZDocCommands
     private static IReadOnlyList<string> ListHeadings(string markdown)
     {
         var headings = new List<string>();
+        var fence = new MarkdownFence();
         foreach (var raw in markdown.Replace("\r\n", "\n").Split('\n'))
         {
+            if (fence.IsCode(raw)) continue;
             if (!TryReadHeading(raw, out _, out var title) || title.Length == 0)
                 continue;
             headings.Add(title);
@@ -205,8 +207,10 @@ internal static class DianaZDocCommands
     private static IReadOnlyList<string> ListVersions(string markdown)
     {
         var versions = new List<string>();
+        var fence = new MarkdownFence();
         foreach (var raw in markdown.Replace("\r\n", "\n").Split('\n'))
         {
+            if (fence.IsCode(raw)) continue;
             string? version = null;
             if (TryReadVersionBullet(raw, out var bulletVersion))
                 version = bulletVersion;
@@ -252,8 +256,10 @@ internal static class DianaZDocCommands
         var lines = markdown.Replace("\r\n", "\n").Split('\n');
         var start = -1;
         var startLevel = 0;
+        var fence = new MarkdownFence();
         for (var i = 0; i < lines.Length; i++)
         {
+            if (fence.IsCode(lines[i])) continue;
             if (!TryReadHeading(lines[i], out var level, out var title))
                 continue;
             if (start < 0)
@@ -294,15 +300,43 @@ internal static class DianaZDocCommands
 
         var collected = new List<string>();
         var capturing = false;
+        var fence = new MarkdownFence();
         foreach (var line in lines)
         {
-            if (TryReadVersionBullet(line, out var itemVersion))
+            if (!fence.IsCode(line) && TryReadVersionBullet(line, out var itemVersion))
                 capturing = itemVersion.Equals(heading, StringComparison.Ordinal);
             if (capturing)
                 collected.Add(line);
         }
 
         return collected.Count == 0 ? null : string.Join('\n', collected).TrimEnd();
+    }
+
+    // Fenced examples can contain # comments and version bullets. They are body,
+    // never document structure; keep their original lines in extracted sections.
+    private sealed class MarkdownFence
+    {
+        private char _marker;
+        private int _length;
+
+        public bool IsCode(string line)
+        {
+            var text = line.AsSpan().TrimStart();
+            var indent = line.Length - text.Length;
+            var run = 0;
+            if (indent <= 3 && text.Length > 0 && text[0] is '`' or '~')
+                while (run < text.Length && text[run] == text[0]) run++;
+            if (_length > 0)
+            {
+                if (run >= _length && text[0] == _marker && text[run..].Trim().IsEmpty)
+                    _length = 0;
+                return true;
+            }
+            if (run < 3 || (text[0] == '`' && text[run..].Contains('`'))) return false;
+            _marker = text[0];
+            _length = run;
+            return true;
+        }
     }
 
     private static bool TryReadVersionBullet(string line, out string version)
@@ -628,9 +662,9 @@ internal static class DianaZDocCommands
     private static string RenderCatalog(IReadOnlyList<ZDocChannel> channels)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 5.1.2 宿主为平铺 host，现场读取 SHA256SUMS）");
+        builder.AppendLine("Z 文档通道（扫描各项目 z-Publish 当前候选：模块为 History*-v*，Vulcan 宿主清单位于 z-Publish 根，运行文件在 host/，现场读取 SHA256SUMS）");
         builder.AppendLine("跨项目读说明书：先把本索引留在对话中，再调用 diana.docs.read domain=<通道>。省略 file 只列出该通道。");
-        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号（如 5.1.2），否则只返回目录。");
+        builder.AppendLine("file 可用 catalog 路径或唯一文件名。超过 12 KiB 的正文必须带 heading=章节标题或版本号，否则只返回目录。");
         builder.AppendLine("diana.docs.read 每次按当前 z 快照解析通道；新增模块无需新增或重载 Diana 命令。");
         if (channels.Count == 0)
         {

@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -77,7 +77,7 @@ try
         temporaryRoot, "2026-020-HistoryJanus", "z-Publish", "HistoryJanus-v9.9.9");
     Directory.CreateDirectory(Path.Combine(channelPackage, "docs"));
     var apiPath = Path.Combine(channelPackage, "docs", "模块API.md");
-    File.WriteAllText(apiPath, "# Janus API\nintro\n## 命令\ncommand-body\n## 窗口\nwindow-body\n");
+    File.WriteAllText(apiPath, "# Janus API\nintro\n## 命令\ncommand-body\n````ps\n# A. 检查\n```\n# 仍在代码块\n````\n~~~\n## 示例标题\n~~~\nend-command-body\n## 窗口\nwindow-body\n");
     var changelogPath = Path.Combine(channelPackage, "docs", "变更摘要.md");
     var changelog = new StringBuilder("# 变更\n## 主要变化\n- 9.9.9 first-item\n  continued-line\n- 9.9.8 other-item\n## 附录\n");
     while (Encoding.UTF8.GetByteCount(changelog.ToString()) <= 12 * 1024)
@@ -144,7 +144,7 @@ try
                  "diana.project.manifest", "diana.project.recent", "diana.project.summary",
                  "diana.relay.call", "diana.relay.describe", "diana.relay.list",
                  "diana.log.read",
-                 "diana.host.modules", "diana.host.ready",
+                 "diana.host.modules", "diana.host.ready", "diana.host.observe",
                  "diana.docs.catalog", "diana.docs.read",
                  "diana.view.capture", "diana.view.windows",
              })
@@ -178,6 +178,18 @@ try
         "view.capture 写入运行态 PNG");
     True(descriptors.Single(item => item.Name == "diana.log.read").Readonly,
         "log.read 必须是只读命令");
+
+    // The text tools must preserve real Unicode and literal escape sequences as distinct inputs.
+    foreach (var input in new[] { "hello", "中文", @"\u4E2D\u6587", "line1\nline2\"quoted\"" })
+    {
+        var base64 = await bus.ExecuteAsync("diana.kit.base64 text=" + CommandParser.QuoteArg(input), "smoke");
+        True(base64.Success, base64.Message);
+        Equal(Convert.ToBase64String(Encoding.UTF8.GetBytes(input)), base64.Data as string, "总线 Base64 必须保留原始文本");
+        var digest = await bus.ExecuteAsync("diana.kit.sha256 text=" + CommandParser.QuoteArg(input), "smoke");
+        True(digest.Success, digest.Message);
+        Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input))), digest.Data as string,
+            "总线 SHA256 必须保留原始文本");
+    }
 
     var missingLogProvider = await bus.ExecuteAsync("diana.log.read", "smoke");
     True(!missingLogProvider.Success
@@ -245,7 +257,7 @@ try
                 frontendInstanceId = "smoke-front",
                 capturedAt = DateTimeOffset.Now,
                 oldestSequence = 1,
-                newestSequence = 42,
+                newestSequence = 50,
                 matchedCount = 1,
                 returnedCount = 1,
                 truncated = false,
@@ -358,6 +370,7 @@ try
     True(hostReady.Success && hostReady.Message.Contains("尚不完整", StringComparison.Ordinal),
         "装载未完成时必须说明仍在进行，不得被误读成热重载失败");
 
+    await ObservationTests.Run(bus, registry);
     var windows = await bus.ExecuteAsync("diana.view.windows", "smoke");
     True(windows.Success && windows.Data is IReadOnlyList<WindowView>, "图形查看器必须安全列出可捕获窗口");
     var syntheticPng = Path.Combine(temporaryRoot, "viewer-smoke.png");
@@ -390,6 +403,12 @@ try
         "项目巡检必须返回可修正的参数错误");
     True(!(await bus.ExecuteAsync($"diana.project.manifest name={projectName}", "smoke")).Success,
         "缺 manifest 的项目必须明确失败");
+    File.WriteAllText(Path.Combine(worktreeDirectory, "project.manifest.json"), "{}");
+    var dynamicAlign = await bus.ExecuteAsync("diana.project.align", "smoke");
+    True(dynamicAlign.Success && JsonSerializer.SerializeToElement(dynamicAlign.Data).GetProperty("ExpectedProjects")
+        .EnumerateArray().Any(item => item.GetString() == projectName), "新增项目自动进入对齐检查，损坏 manifest 作为失败行返回");
+    var selectedAlign = await bus.ExecuteAsync($"diana.project.align name={projectName}", "smoke");
+    Equal(1, JsonSerializer.SerializeToElement(selectedAlign.Data).GetProperty("Total").GetInt32(), "name 只检查目标项目");
     var invalidHandle = await bus.ExecuteAsync("diana.view.capture handle=invalid", "smoke");
     True(!invalidHandle.Success && invalidHandle.Message.Contains("handle 必须", StringComparison.Ordinal),
         "图形查看器必须返回可修正的句柄错误");
@@ -404,13 +423,18 @@ try
     var listed = await bus.ExecuteAsync("diana.docs.read domain=janus", "smoke");
     True(listed.Success && listed.Message.Contains("docs/模块API.md", StringComparison.Ordinal), "文档通道列举");
     var opened = await bus.ExecuteAsync("diana.docs.read domain=janus file=模块API.md heading=命令", "smoke");
-    True(opened.Success && opened.Message.Contains("command-body", StringComparison.Ordinal), "文档按节读取");
-    True(!opened.Message.Contains("window-body", StringComparison.Ordinal), "按节读取不得越界");
+    True(opened.Success && JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("command-body", StringComparison.Ordinal), "文档按节读取");
+    True(!JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("window-body", StringComparison.Ordinal), "按节读取不得越界");
+    True(!opened.Message.Contains("command-body", StringComparison.Ordinal), "正文只保留在 Data 中");
+    True(JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("end-command-body", StringComparison.Ordinal),
+        "反引号及波浪号围栏中的标题不得截断章节，短围栏不得提前闭合");
+    var codeHeading = await bus.ExecuteAsync("diana.docs.read domain=janus file=模块API.md heading=示例标题", "smoke");
+    True(!codeHeading.Success && !codeHeading.Message.Contains("示例标题、", StringComparison.Ordinal), "代码块标题不得可选或进入目录");
     var outline = await bus.ExecuteAsync("diana.docs.read domain=janus file=docs/变更摘要.md", "smoke");
     True(outline.Success && outline.Message.Contains("版本:", StringComparison.Ordinal), "长文默认返回目录");
     var versionSlice = await bus.ExecuteAsync("diana.docs.read domain=janus file=变更摘要.md heading=9.9.9", "smoke");
-    True(versionSlice.Success && versionSlice.Message.Contains("first-item", StringComparison.Ordinal), "按版本读取");
-    True(!versionSlice.Message.Contains("other-item", StringComparison.Ordinal), "版本读取不得带入其他版本");
+    True(versionSlice.Success && JsonSerializer.SerializeToElement(versionSlice.Data).GetProperty("Content").GetString()!.Contains("first-item", StringComparison.Ordinal), "按版本读取");
+    True(!JsonSerializer.SerializeToElement(versionSlice.Data).GetProperty("Content").GetString()!.Contains("other-item", StringComparison.Ordinal), "版本读取不得带入其他版本");
     True(!(await bus.ExecuteAsync("diana.docs.read domain=janus file=../secret.md", "smoke")).Success, "文档路径不得越界");
     var missingHeading = await bus.ExecuteAsync(
         "diana.docs.read domain=janus file=docs/章节很多.md heading=不存在", "smoke");
