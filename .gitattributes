@@ -217,18 +217,18 @@
 *.mkv -text
 *.wmv -text
 *.flv -text
-\# filter=lfs diff=lfs merge=lfs -text
-常见视频格式 filter=lfs diff=lfs merge=lfs -text
+\# -text
+常见视频格式 -text
 *.mp4 -text
 *.mov -text
 *.avi -text
-Pro filter=lfs diff=lfs merge=lfs -text
-工程文件 filter=lfs diff=lfs merge=lfs -text
+Pro -text
+工程文件 -text
 *.prproj -text
 *.prp -text
 *.prtpl -text
 *.pl -text
-Premiere filter=lfs diff=lfs merge=lfs -text
+Premiere -text
 
 # Published package hashes cover exact bytes; Git must not normalize package content.
 z-Publish/** binary
