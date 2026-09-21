@@ -1,73 +1,90 @@
-# HistoryDiana — OneHistory 的 AI 工具区
+# HistoryDiana
 
-HistoryDiana 是 OneHistory 的 **AI 工具区**：统一承接面向 AI 的跨项目观察、巡检、读取、转换和工具中继能力。
-当前工具包括前端图形查看、项目巡检、小工具、MCP 中继和 z 文档通道；后续新增的 AI 通用工具也默认归 Diana。
-
-业务模块仍拥有自己的领域能力，Diana 通过中继帮助 AI 发现和调用，不复制领域实现。唯一例外是已经冻结的
-模块开发管线：`vulcan.dev.start/submit/finish` 继续由 HistoryVulcan 拥有，只走 Console CLI，不进入 Diana 或 MCP。
-Diana 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulcan 前端。
+> OneHistory 的 AI 工具区：观察、巡检、文档读取与 MCP 中继
 
 ![OneHistory Logo](./Logo.png)
+
+## 定位
+
+HistoryDiana 是 OneHistory 的 **AI 工具区**：统一承接面向 AI 的跨项目观察、巡检、读取、转换和工具中继能力。
+新增的 AI 通用工具，只要不属于某个业务模块的领域合同，默认归 Diana。
+
+- 业务模块仍拥有自己的领域能力；Diana 只中继调用，不复制、不接管领域实现。
+- 不提供自己的 UI 页面；`diana.view.*` 只观察现有 HistoryVulcan 前端。
+- 不拥有模块开发管线：`vulcan.dev.start/submit/finish` 由 HistoryVulcan 独占，只走 Console CLI，不进入 Diana 或 MCP。
+
+## 概况
+
+| 项 | 值 |
+| --- | --- |
+| 编号 | `2026-019` |
+| 角色 | 宿主模块（`kind=module`） |
+| 指令域 | `diana` |
+| 界面 | 无（`ui: false`） |
+| MCP 投影 | `standard`；写命令只有 `diana.relay.call` 与 `diana.view.capture` |
+| 版本与宿主下限 | [`HistoryDianaVersion.props`](./b-Code-HistoryDiana/HistoryDianaVersion.props) |
+
+## 能力
+
+| 类 | 指令 | 用途 |
+| --- | --- | --- |
+| `log` | `diana.log.read` | 读取前端控制台内存日志；默认只返回 Error/Fatal |
+| `host` | `diana.host.modules` / `ready` / `observe` | 只读转发活宿主装载状态，`observe` 可对比基线 |
+| `project` | `diana.project.summary` / `recent` / `largest` | 已登记工作树的只读巡检 |
+| `project` | `diana.project.manifest` / `docs` / `align` | 项目 manifest、现行文档与入口对齐检查 |
+| `kit` | `diana.kit.sha256` / `base64` / `guid` / `now` | 无副作用的小计算 |
+| `relay` | `diana.relay.list` / `describe` / `call` | 按当前 MCP 策略列举与调用工具 |
+| `docs` | `diana.docs.catalog` / `read` | 现场扫描 z 通道，按模块域读取已发布文档 |
+| `view` | `diana.view.windows` / `capture` | 列出并原尺寸捕获 HistoryVulcan 前端窗口 |
+
+跨项目读文档：先 `diana.docs.catalog`，再 `diana.docs.read domain=<域>`。完整参数与返回见 [模块 API](./b-Office-Diana/package/模块API.md)。
 
 ## 入口
 
 | 入口 | 用途 |
 | --- | --- |
-| [`project.manifest.json`](./project.manifest.json) | 项目身份、活动目录、文档与命令的机器可读清单 |
 | [`AGENTS.md`](./AGENTS.md) | AI 工作合同：读取顺序、真值判定、边界 |
-| [`b-Office-Diana/`](./b-Office-Diana/) | Diana 自身的项目合同 |
-| [`原生控制台日志查看需求书`](./b-Office-Diana/current/原生控制台日志查看需求书.md) | `diana.log.read` 的数据源、接口与验收 |
-| [`模块开发观察手册`](./b-Office-Diana/package/模块开发观察手册.md) | 开发任一模块时，一轮里在哪三处用 Diana 取证 |
-| HistoryVulcan `b-Office/package/模块开发手册.md` | 模块开发工作区、送审和并回流程 |
+| [`project.manifest.json`](./project.manifest.json) | 项目身份、活动目录、文档与命令 |
+| [文档中心](./b-Office-Diana/文档中心.md) | 文档索引与读取顺序 |
+| [项目概览](./b-Office-Diana/current/项目概览.md) | 目标、范围与状态 |
+| [技术合同](./b-Office-Diana/current/技术合同.md) | 现行需求与架构 |
+| [有效决策](./b-Office-Diana/current/有效决策.md) | 仍然有效的关键决策 |
+| [验证合同](./b-Office-Diana/current/验证合同.md) | 验证层级、命令与证据 |
+| [模块 API](./b-Office-Diana/package/模块API.md) | 跨模块消费合同 |
+| [模块开发观察手册](./b-Office-Diana/package/模块开发观察手册.md) | 开发任一模块时，一轮里在哪三处用 Diana 取证 |
 
-## 从这里开始
+## 目录
 
-1. AI 需要通用工具时，先从 `diana.*` 查找；新能力若不属于某个业务模块的领域合同，默认在 Diana 实现。
-2. 需要跨项目说明书时，先执行 `diana.docs.catalog`，把索引留在对话中，再读取对应 z 通道。
-3. 只有开发模块时例外：读宿主《模块开发手册》，通过 Console CLI 走
-   `vulcan.dev.start` → `vulcan.dev.submit` → `vulcan.dev.finish`；宿主自身禁止走这三条。
-
-## 指令
-
-七类。文档查看使用固定的 `diana.docs.read`，每次按现场 z 动态解析模块域。
-`standard` 写命令是 `diana.relay.call` 与写入运行态 PNG 的 `diana.view.capture`。
-
-| 类 | 指令 | 用途 |
-| --- | --- | --- |
-| `log` | `diana.log.read` | 读取当前前端控制台内存日志；默认只返回 Error/Fatal |
-| `host` | `diana.host.modules` / `ready` / `observe` | 只读转发活宿主装载状态：版本、实例 ID、指令数、附着失败 |
-| `project` | `diana.project.summary` / `recent` / `largest` | 已登记工作树的只读巡检 |
-| `project` | `diana.project.manifest` / `docs` / `align` | 已授权项目的 manifest 与现行文档；动态发现项目入口并检查对齐 |
-| `kit` | `diana.kit.sha256` / `base64` / `guid` / `now` | 无副作用的小计算 |
-| `relay` | `diana.relay.list` / `describe` / `call` | 按当前 MCP 策略实时列举与调用工具 |
-| `docs` | `diana.docs.catalog` | 现场扫描全部 z 通道 |
-| `docs` | `diana.docs.read domain=<域>` | 按当前 z 快照读取任意模块文档 |
-| `view` | `diana.view.windows` | 列出可捕获的 HistoryVulcan 前端窗口 |
-| `view` | `diana.view.capture [handle=]` | 原尺寸捕获前端客户区，返回 PNG 路径、尺寸、哈希和像素统计 |
-
-2.6.1 新增只读 `diana.host.observe name=<模块> [baseline=<上次返回的令牌>]`，汇总模块、就绪与日志并比较基线。文档正文只在 Data.Content 保留；MCP 协议层的结构化数据兼容副本由网关负责。跨项目消费始终使用 `diana.docs.catalog/read`，`project.docs` 仅用于已授权的项目维护。
+| 路径 | 职责 |
+| --- | --- |
+| `b-Code-HistoryDiana/` | 模块源码、manifest 与 `tests/` 下的 Smoke |
+| `b-Code/` | 项目合同检查与候选构建辅助脚本 |
+| `b-Office-Diana/` | 项目文档：`current/` 现行合同、`package/` 消费合同、`history/` 只读归档 |
+| `b-References/` | 参考图 |
+| `z-Publish/` | 正式快照与 `history/` 归档，由宿主管线写入 |
 
 ## 构建与验证
 
-```bash
-dotnet build ./b-Code-HistoryDiana/HistoryDiana.csproj -c Release
+```powershell
+dotnet restore .\b-Code-HistoryDiana\HistoryDiana.csproj
+dotnet build .\b-Code-HistoryDiana\HistoryDiana.csproj -c Release
+dotnet run --project .\b-Code-HistoryDiana\tests\HistoryDiana.Smoke\HistoryDiana.Smoke.csproj -c Release
+powershell -NoProfile -ExecutionPolicy Bypass -File .\b-Code\Test-ProjectContract.ps1 -Instantiation
 ```
 
-```bash
-dotnet run --project ./b-Code-HistoryDiana/tests/HistoryDiana.Smoke/HistoryDiana.Smoke.csproj -c Release
-```
+## 开发与发布
 
-## 部署
+改动只进 `vulcan.dev.start` 创建的工作区，经宿主 Console CLI 走
+`vulcan.dev.start` → `vulcan.dev.submit`（候选构建并热装送审）→ `vulcan.dev.finish`（批准后并回并写入 `z-Publish`）。
+宿主只扫描 `%AppData%\HistoryVulcan\Modules`，本仓不自行发布。
 
-宿主只扫描 `%AppData%\HistoryVulcan\Modules`。候选提交、安装与热重载统一由宿主模块开发管线执行。
+## 要点
 
-当前源码版本为 `2.6.1`，适配 HistoryVulcan `5.1.2`。
+- Diana 不登记 `diana.worktree.*`、`diana.release.*`、`diana.trial.*`，也不经 `diana.relay.call` 绕行开发管线。
+- 模块发布登记表在宿主仓 `2026-023-HistoryVulcan/b-Code-Eng/pipeline/module-publish.manifest.json`；
+  `HistoryVulcan` 是 `kind=host`，走 `vulcan.release.cycle`，禁止走模块开发管线。
+- `diana.project.docs` 只用于已授权项目的维护；跨项目消费一律走 `diana.docs.catalog/read`。
 
-## 开发管线例外
+---
 
-Diana 不拥有发布器，也不登记 `diana.worktree.*`、`diana.release.*` 或 `diana.trial.*`。
-已冻结的模块开发管线及 z 写入由 HistoryVulcan 独占。已登记 `HistoryDiana`、`HistoryJanus`、
-`HistoryMercury`、`HistoryMinerva`、`HistoryAurora`、`HistoryPortunus`（`kind=module`）；
-`HistoryVulcan` 是 `kind=host`，禁止走模块开发管线。
-登记表位于宿主仓 `2026-023-HistoryVulcan/b-Code-Eng/pipeline/module-publish.manifest.json`。
-写入 z 只走 `vulcan.dev.submit` / `finish`（模块）或 `vulcan.release.cycle`（宿主）。本仓不发布。
+作者：Pinavia
