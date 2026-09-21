@@ -2,8 +2,6 @@
 
 > OneHistory 的 AI 工具区：观察、巡检、文档读取与 MCP 中继
 
-![OneHistory Logo](./Logo.png)
-
 ## 定位
 
 HistoryDiana 是 OneHistory 的 **AI 工具区**：统一承接面向 AI 的跨项目观察、巡检、读取、转换和工具中继能力。
@@ -85,6 +83,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\b-Code\Test-ProjectContrac
   `HistoryVulcan` 是 `kind=host`，走 `vulcan.release.cycle`，禁止走模块开发管线。
 - `diana.project.docs` 只用于已授权项目的维护；跨项目消费一律走 `diana.docs.catalog/read`。
 
----
+## 保留内容
+- 本模板项目介绍：此为最初的准备的项目模板
+    每个分支项目都会由他去继承
+- 作者：Pinavia - 2025
 
-作者：Pinavia
+![logo](./Logo.png)
