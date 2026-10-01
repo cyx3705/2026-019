@@ -24,8 +24,9 @@ internal static class DianaDocsCommands
     private const int MaximumSummaryLength = 120;
     private const int MinimumParameterDescriptionLength = 4;
     private const int MaximumAuditLines = 40;
-    // 两段式指令（<域>.<方法>）在宿主目录里没有命令类，说明书里单独归一组。
-    private const string TwoSegmentClass = "(两段名)";
+    // 两段式指令（<域>.<方法>）是宿主认可的无类直接方法（mercury.go、janus.status），目录里没有命令类，
+    // 说明书单独归一组；它们是设计而不是缺陷，audit 不报（2.8.1）。
+    private const string TwoSegmentClass = "(直接方法)";
 
     // 指向已退役文档的说法：说明书只剩自描述，再让调用者去「看文档」等于断头路。
     private static readonly Regex RetiredDocumentReference = new(
@@ -304,8 +305,6 @@ internal static class DianaDocsCommands
             yield return Finding("summary-too-long", $"Summary {summary.Length} 字，一句话说明应在 {MaximumSummaryLength} 字内，细节放参数说明");
         if (RetiredDocumentReference.IsMatch(command.Summary))
             yield return Finding("retired-doc-reference", "Summary 引用了已退役的消费文档，说明书只剩自描述");
-        if (command.Name.Count(character => character == '.') < 2)
-            yield return Finding("name-two-segment", "指令名不是 <域>.<类>.<方法> 三段式，说明书里归不进任何命令类");
 
         foreach (var parameter in command.Parameters)
         {
@@ -318,7 +317,10 @@ internal static class DianaDocsCommands
                 yield return Finding("retired-doc-reference", $"参数 {parameter.Name} 的说明引用了已退役的消费文档");
             if (parameter.Required && parameter.Default != null)
                 yield return Finding("required-with-default", $"参数 {parameter.Name} 既是必填又有默认值 {parameter.Default}");
-            if (parameter.Type.Equals("bool", StringComparison.OrdinalIgnoreCase) && parameter.Default == null && !parameter.Required)
+            // 省略本身有含义（如「省略时查询当前值」）时不能写 Default——写了总线会代填，查询就变成设置。
+            // 说明里讲清省略的行为同样让调用者知道该怎么填，算合规（2.8.1）。
+            if (parameter.Type.Equals("bool", StringComparison.OrdinalIgnoreCase) && parameter.Default == null && !parameter.Required
+                && !description.Contains("省略", StringComparison.Ordinal))
                 yield return Finding("bool-without-default", $"可省略的布尔参数 {parameter.Name} 没写默认值，调用者不知道省略时是 true 还是 false");
             if (parameter.Default != null && parameter.AllowedValues.Length > 0
                 && !parameter.AllowedValues.Contains(parameter.Default, StringComparer.OrdinalIgnoreCase))

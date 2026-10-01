@@ -404,6 +404,8 @@ try
         Name = "janus.go",
         Domain = "janus",
         Summary = "两段名指令，用来核对说明书分组",
+        Parameters = [new ParameterSpec { Name = "watch", Description = "开或关；省略时查询当前值", Type = ParamType.Bool, Position = 0 }],
+        Example = "janus.go watch=true",
         Handler = CommandDescriptor.Sync(_ => CommandResult.Ok()),
     });
     registry.Register(new CommandDescriptor
@@ -489,11 +491,17 @@ try
              {
                  "summary-missing", "parameter-undescribed", "required-with-default", "default-not-allowed",
                  "bool-without-default", "position-gap", "retired-doc-reference", "example-bad-parameter",
-                 "example-missing-required", "allowed-values-in-text", "name-two-segment",
+                 "example-missing-required", "allowed-values-in-text",
              })
     {
         True(rules.Contains(rule), $"audit 必须查出 {rule}: {brokenAudit.Message}");
     }
+    // 2.8.1：无类直接方法是宿主认可的设计；省略行为写在说明里的布尔参数也合规。
+    var directFindings = JsonSerializer.SerializeToElement(brokenAudit.Data).GetProperty("findings").EnumerateArray()
+        .Where(item => item.GetProperty("command").GetString() == "janus.go")
+        .Select(item => item.GetProperty("rule").GetString()!).ToList();
+    True(directFindings.Count == 0, $"janus.go 不得报缺陷: {string.Join(",", directFindings)}");
+    True(!rules.Contains("name-two-segment"), "两段名不再是缺陷");
 
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
         "程序集不得保留 ProjectPulse 类型");

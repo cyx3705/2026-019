@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "type": "HistoryVulcan.Module",
   "name": "HistoryDiana",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "description": "OneHistory AI 工具区：控制台日志、宿主装载观察、前端图形查看、项目巡检、指令说明书与 MCP 中继。",
   "artifact": "HistoryDiana.dll",
   "docs": "HistoryDiana.xml",

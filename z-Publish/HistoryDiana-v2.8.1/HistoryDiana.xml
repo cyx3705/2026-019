@@ -1,0 +1,99 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>HistoryDiana</name>
+    </assembly>
+    <members>
+        <member name="T:HistoryDiana.DianaCommandGuard">
+            <summary>Preserves actionable module errors across the host command boundary.</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaDocsCommands">
+            <summary>
+            指令说明书：注册即文档。每次现查宿主 <c>vulcan.command.list</c>，把各模块登记时写的
+            Summary / Parameters / Example / 只读 / 确认 / 隐藏原因渲染成可读的说明书。
+            </summary>
+            <remarks>
+            2.8.0 起 OneHistory 不再维护消费文档（各仓 <c>b-Office/package/模块API.md</c> 与
+            <c>z-Publish/*/docs/</c> 全部退役）。说明书的唯一来源是指令注册时的自描述，
+            所以自描述写得不够就是说明书不够——<c>diana.docs.audit</c> 专门指出这类缺陷。
+            不扫描 z-Publish，不读任何 Markdown，新模块装上即可查，无需新增或重载 Diana 命令。
+            </remarks>
+        </member>
+        <member name="M:HistoryDiana.DianaDocsCommands.Property(System.Text.Json.JsonElement,System.String,System.Text.Json.JsonElement@)">
+            <summary>宿主 6.0.0 起 Data 是驼峰 JSON；属性名仍按大小写不敏感解析，进程内替身可能是 PascalCase。</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaHostCommands">
+            <summary>
+            运行宿主观察：把宿主自己的只读装载状态整理成 AI 可核对的结构化结果。
+            </summary>
+            <remarks>
+            宿主的 <c>vulcan.module.*</c> 整类都不投影到 MCP（写操作按策略隐藏，只读的 list/ready
+            被一起挡在外面），而《模块开发手册》第四节的热重载判据恰好要读这两条。缺了这个通道，
+            AI 每一轮都得跳出 MCP 去跑 Console CLI。这一类只做进程内转发和形状校验：不复制宿主的
+            装载实现，不碰运行包，也不参与已冻结的 <c>vulcan.dev.*</c> 管线。
+            </remarks>
+        </member>
+        <member name="M:HistoryDiana.DianaHostCommands.TryReadAsync(HistoryVulcan.Core.Commands.ICommandBus,System.String)">
+            <summary>转发一条宿主只读指令，并把结果统一成 <see cref="T:System.Text.Json.JsonElement"/>。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaHostCommands.TryProperty(System.Text.Json.JsonElement,System.String,System.Text.Json.JsonElement@)">
+            <summary>宿主两侧的序列化命名策略不一定一致，属性名按大小写不敏感解析。</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaKitCommands">
+            <summary>
+            小工具集：哈希、编码、标识与时间。都是无副作用的一行计算，合并为一个 <c>kit</c> 类
+            而不是按 text / identity / time 各开一个只有一两条命令的类。
+            </summary>
+        </member>
+        <member name="T:HistoryDiana.DianaObservationCommands">
+            <summary>Combines bounded read-only observations without owning the development pipeline.</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaProjectAlignmentCommands">
+            <summary>Provides read-only project manifest, current-document, and cross-project alignment views.</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaRelayCommands">
+            <summary>
+            MCP 工具中继：按 OneHistory 当前的 MCP 策略实时列举、查看和调用工具。
+            </summary>
+            <remarks>
+            存在的理由是快照过期问题——AI 会话持有的工具目录是任务开始时的旧快照，
+            模块热重载后就与实际可见工具不一致。这里每次都现查现调，绕开那份旧快照。
+            </remarks>
+        </member>
+        <member name="T:HistoryDiana.DianaRuntime">
+            <summary>
+            模块运行时要用的外部事实：项目库根与 MCP 地址。
+            </summary>
+            <remarks>
+            2.7.0 起一律经总线问（宿主 6.0.0 统一契约）：项目库根问 <c>vulcan.host.info</c>，
+            MCP 地址问 <c>portunus.mcp.status</c>。此前读 Cursor 的 <c>mcp.json</c>、Portunus 写的 <c>endpoint.json</c>，
+            项目库根写死缺省——都是绕开总线的文件约定，别的模块一改布局这里就静默失配。
+            环境变量覆盖仍保留（测试与排障用），只接受值本身，不再接受文件路径。
+            </remarks>
+        </member>
+        <member name="M:HistoryDiana.DianaRuntime.ResolveProjectLibraryRoot(HistoryVulcan.Core.Commands.ICommandBus)">
+            <summary>项目库根：<c>HISTORYCLIO_ROOT</c> → <c>vulcan.host.info</c> 的 <c>libraryRoot</c> → 缺省。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaRuntime.ReadMcpEndpoint(HistoryVulcan.Core.Commands.ICommandBus)">
+            <summary>MCP 地址：<c>HISTORYVULCAN_ENDPOINT</c>（URL）→ <c>portunus.mcp.status</c> 的 <c>url</c>。</summary>
+        </member>
+        <member name="M:HistoryDiana.DianaRuntime.ReadString(HistoryVulcan.Core.Commands.ICommandBus,System.String,System.String)">
+            <summary>安静执行一条只读指令，按 JSON 字段名取一个字符串；指令失败或没有该字段时为 null。</summary>
+        </member>
+        <member name="T:HistoryDiana.DianaViewCommands">
+            <summary>Captures the running HistoryVulcan frontend for AI visual inspection.</summary>
+        </member>
+        <member name="T:HistoryDiana.HistoryDianaCommands">
+            <summary>Registers the HistoryDiana read-only worktree inspection commands.</summary>
+        </member>
+        <member name="M:HistoryDiana.HistoryDianaCommands.Attach(HistoryVulcan.Core.Modules.IModuleContext)">
+            <summary>Attaches the host command bus and stages all module commands.</summary>
+        </member>
+        <member name="M:HistoryDiana.OhsmcpClient.TryReadModuleNames(System.Text.Json.JsonElement,System.Collections.Generic.IReadOnlySet{System.String}@)">
+            <summary>
+            从 command_list 的行数组提取模块工具名。structuredContent 优先路径与
+            content 回退路径共用本函数,确保两条路径解析逻辑不漂移。
+            </summary>
+        </member>
+    </members>
+</doc>
