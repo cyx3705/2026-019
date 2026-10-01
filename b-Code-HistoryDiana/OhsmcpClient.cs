@@ -131,17 +131,17 @@ internal sealed class OhsmcpClient : IDisposable
             return false;
         }
 
+        // 2.7.1：按宿主 6.0.0 写明的 JSON 形状读（camelCase：commandName / source）。
+        // 5.x 时 Data 是宿主的 CLR 类型，经网关序列化成 PascalCase；6.0.0 起宿主直接交 JSON，旧字段名不再出现。
         var collected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows.EnumerateArray())
         {
-            var source = row.TryGetProperty("Source", out var sourceElement)
+            var source = row.TryGetProperty("source", out var sourceElement)
                 ? sourceElement.GetString()
                 : null;
-            var toolName = row.TryGetProperty("McpToolName", out var toolElement)
-                ? toolElement.GetString()
-                : row.TryGetProperty("CommandName", out var commandElement)
-                    ? commandElement.GetString()?.Replace('.', '_').ToLowerInvariant()
-                    : null;
+            var toolName = row.TryGetProperty("commandName", out var commandElement)
+                ? commandElement.GetString()?.Replace('.', '_').ToLowerInvariant()
+                : null;
             if (source != null
                 && source.Equals("module", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(toolName))

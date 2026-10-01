@@ -71,8 +71,8 @@ try
     }
 
     using (var rows = JsonDocument.Parse(
-               "[{\"CommandName\":\"diana.view.windows\",\"Source\":\"module\"}," +
-               "{\"CommandName\":\"vulcan.command.list\",\"Source\":\"framework:service\"}]"))
+               "[{\"commandName\":\"diana.view.windows\",\"source\":\"module\"}," +
+               "{\"commandName\":\"vulcan.command.list\",\"source\":\"framework:service\"}]"))
     {
         True(OhsmcpClient.TryReadModuleNames(rows.RootElement, out var moduleTools), "模块工具目录必须可解析");
         True(moduleTools.SetEquals(["diana_view_windows"]), "模块命令名必须映射为当前 MCP 工具名");
