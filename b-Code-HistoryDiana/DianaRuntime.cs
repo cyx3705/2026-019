@@ -1,119 +1,75 @@
 using System.IO;
 using System.Text.Json;
+using HistoryVulcan.Core.Commands;
 
 namespace HistoryDiana;
 
-/// <summary>Resolves module-owned runtime inputs after Vulcan 5.0 removed host settings from IModuleContext.</summary>
+/// <summary>
+/// 模块运行时要用的外部事实：项目库根与 MCP 地址。
+/// </summary>
+/// <remarks>
+/// 2.7.0 起一律经总线问（宿主 6.0.0 统一契约）：项目库根问 <c>vulcan.host.info</c>，
+/// MCP 地址问 <c>portunus.mcp.status</c>。此前读 Cursor 的 <c>mcp.json</c>、Portunus 写的 <c>endpoint.json</c>，
+/// 项目库根写死缺省——都是绕开总线的文件约定，别的模块一改布局这里就静默失配。
+/// 环境变量覆盖仍保留（测试与排障用），只接受值本身，不再接受文件路径。
+/// </remarks>
 internal static class DianaRuntime
 {
     private const string DefaultProjectLibraryRoot = @"C:\OneHistory\HistoryClio";
-    private const string CursorServerName = "history-vulcan";
 
-    public static string ResolveProjectLibraryRoot()
+    /// <summary>项目库根：<c>HISTORYCLIO_ROOT</c> → <c>vulcan.host.info</c> 的 <c>libraryRoot</c> → 缺省。</summary>
+    public static string ResolveProjectLibraryRoot(ICommandBus? bus)
     {
         var configured = Environment.GetEnvironmentVariable("HISTORYCLIO_ROOT");
-        var value = string.IsNullOrWhiteSpace(configured) ? DefaultProjectLibraryRoot : configured.Trim();
-        return Path.GetFullPath(value);
+        if (!string.IsNullOrWhiteSpace(configured))
+            return Path.GetFullPath(configured.Trim());
+
+        var fromHost = bus == null ? null : ReadString(bus, "vulcan.host.info", "libraryRoot");
+        return Path.GetFullPath(string.IsNullOrWhiteSpace(fromHost) ? DefaultProjectLibraryRoot : fromHost);
     }
 
-    public static McpEndpoint ReadMcpEndpoint()
+    /// <summary>MCP 地址：<c>HISTORYVULCAN_ENDPOINT</c>（URL）→ <c>portunus.mcp.status</c> 的 <c>url</c>。</summary>
+    public static McpEndpoint ReadMcpEndpoint(ICommandBus? bus)
     {
         var configured = Environment.GetEnvironmentVariable("HISTORYVULCAN_ENDPOINT");
         if (!string.IsNullOrWhiteSpace(configured))
         {
-            var value = configured.Trim();
-            if (Uri.TryCreate(value, UriKind.Absolute, out var configuredUri)
-                && !configuredUri.IsFile)
-                return new McpEndpoint(RequireLoopbackMcpUri(configuredUri), null);
-            return ReadLegacyEndpointFile(Path.GetFullPath(value));
+            if (!Uri.TryCreate(configured.Trim(), UriKind.Absolute, out var configuredUri) || configuredUri.IsFile)
+                throw new InvalidOperationException("HISTORYVULCAN_ENDPOINT 必须是 MCP 的 http 回环 URL");
+            return new McpEndpoint(RequireLoopbackMcpUri(configuredUri), null);
         }
 
-        var configuredMcpFile = Environment.GetEnvironmentVariable("HISTORYVULCAN_MCP_CONFIG");
-        var path = string.IsNullOrWhiteSpace(configuredMcpFile)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cursor", "mcp.json")
-            : Path.GetFullPath(configuredMcpFile.Trim());
-        if (!File.Exists(path))
-            throw new InvalidOperationException($"找不到 HistoryVulcan MCP 配置: {path}");
+        if (bus == null)
+            throw new InvalidOperationException("HistoryDiana 尚未接上宿主总线，无法查询 MCP 地址");
 
-        try
-        {
-            using var document = JsonDocument.Parse(File.ReadAllText(path));
-            var root = document.RootElement;
-            if (!root.TryGetProperty("mcpServers", out var servers)
-                || servers.ValueKind != JsonValueKind.Object
-                || !servers.TryGetProperty(CursorServerName, out var server)
-                || server.ValueKind != JsonValueKind.Object
-                || !server.TryGetProperty("url", out var urlElement)
-                || urlElement.ValueKind != JsonValueKind.String
-                || !Uri.TryCreate(urlElement.GetString(), UriKind.Absolute, out var url))
-            {
-                throw new InvalidOperationException($"MCP 配置缺少 mcpServers.{CursorServerName}.url");
-            }
-
-            return new McpEndpoint(RequireLoopbackMcpUri(url), null);
-        }
-        catch (JsonException ex)
-        {
-            throw new InvalidOperationException("HistoryVulcan MCP 配置不是有效 JSON", ex);
-        }
-        catch (IOException ex)
-        {
-            throw new InvalidOperationException("读取 HistoryVulcan MCP 配置失败", ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            throw new InvalidOperationException("读取 HistoryVulcan MCP 配置失败", ex);
-        }
+        var url = ReadString(bus, "portunus.mcp.status", "url");
+        if (string.IsNullOrWhiteSpace(url))
+            throw new InvalidOperationException("MCP 服务未运行或 HistoryPortunus 未装载（portunus.mcp.status 没有给出地址）");
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            throw new InvalidOperationException($"portunus.mcp.status 给出的地址无效: {url}");
+        return new McpEndpoint(RequireLoopbackMcpUri(uri), null);
     }
 
-    private static McpEndpoint ReadLegacyEndpointFile(string path)
+    /// <summary>安静执行一条只读指令，按 JSON 字段名取一个字符串；指令失败或没有该字段时为 null。</summary>
+    private static string? ReadString(ICommandBus bus, string command, string field)
     {
-        if (!File.Exists(path))
-            throw new InvalidOperationException($"找不到 HistoryVulcan MCP endpoint.json: {path}");
-
+        var result = bus.InvokeAsync(command, "").GetAwaiter().GetResult();
+        if (!result.Success || result.Data == null)
+            return null;
         try
         {
-            using var document = JsonDocument.Parse(File.ReadAllText(path));
-            var root = document.RootElement;
-            var token = root.TryGetProperty("accessToken", out var tokenElement)
-                        && tokenElement.ValueKind == JsonValueKind.String
-                ? tokenElement.GetString()
+            var data = result.Data is JsonElement element
+                ? element
+                : JsonSerializer.SerializeToElement(result.Data, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            return data.ValueKind == JsonValueKind.Object
+                   && data.TryGetProperty(field, out var value)
+                   && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
                 : null;
-            if (root.TryGetProperty("endpoint", out var endpointElement)
-                && endpointElement.ValueKind == JsonValueKind.String
-                && Uri.TryCreate(endpointElement.GetString(), UriKind.Absolute, out var endpoint))
-            {
-                return new McpEndpoint(RequireLoopbackMcpUri(endpoint), token);
-            }
-
-            if (root.TryGetProperty("url", out var urlElement)
-                && urlElement.ValueKind == JsonValueKind.String
-                && Uri.TryCreate(urlElement.GetString(), UriKind.Absolute, out var url))
-            {
-                return new McpEndpoint(RequireLoopbackMcpUri(url), token);
-            }
-
-            if (!root.TryGetProperty("port", out var portElement)
-                || portElement.ValueKind != JsonValueKind.Number
-                || !portElement.TryGetInt32(out var port)
-                || port is < 1024 or > 65535)
-            {
-                throw new InvalidOperationException("endpoint.json 缺少有效的 port 或 endpoint");
-            }
-
-            return new McpEndpoint(RequireLoopbackMcpUri(new Uri($"http://127.0.0.1:{port}/mcp")), token);
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException)
         {
-            throw new InvalidOperationException("HistoryVulcan endpoint.json 不是有效 JSON", ex);
-        }
-        catch (IOException ex)
-        {
-            throw new InvalidOperationException("读取 HistoryVulcan endpoint.json 失败", ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            throw new InvalidOperationException("读取 HistoryVulcan endpoint.json 失败", ex);
+            return null;
         }
     }
 

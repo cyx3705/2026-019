@@ -4,7 +4,7 @@ using HistoryVulcan.Core.Commands;
 
 internal static class ObservationTests
 {
-    public static async Task Run(CommandBus bus, CommandRegistry registry)
+    public static async Task Run(TestCommandBus bus, TestRegistrar registry)
     {
         static void Check(bool condition, string message)
         {
@@ -23,8 +23,8 @@ internal static class ObservationTests
             catch (JsonException) { rejected = true; }
             Check(rejected, "非对象、损坏或超长 JSON 仍须拒绝");
         }
-        var missingRegistry = new CommandRegistry();
-        var missingBus = new CommandBus(missingRegistry, new TestLog());
+        var missingRegistry = new TestRegistrar();
+        var missingBus = new TestCommandBus(missingRegistry);
         DianaObservationCommands.Register(missingRegistry, missingBus);
         var missing = await missingBus.ExecuteAsync("diana.host.observe name=HistoryDiana", "smoke");
         var missingData = JsonSerializer.SerializeToElement(missing.Data);

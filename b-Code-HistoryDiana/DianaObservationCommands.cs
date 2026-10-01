@@ -8,7 +8,7 @@ internal static class DianaObservationCommands
 {
     private const int MaximumBaselineLength = 64 * 1024;
 
-    public static void Register(CommandRegistry registry, CommandBus bus)
+    public static void Register(ICommandRegistrar registry, ICommandBus bus)
     {
         registry.Register(new CommandDescriptor
         {
@@ -157,9 +157,9 @@ internal static class DianaObservationCommands
         }).Where(item => item.Before != item.After).ToArray();
     }
 
-    private static async Task<(JsonElement? Data, string? Error)> Read(CommandBus bus, string command)
+    private static async Task<(JsonElement? Data, string? Error)> Read(ICommandBus bus, string command)
     {
-        var result = await bus.ExecuteAsync(command, "diana.host.observe").ConfigureAwait(false);
+        var result = await bus.InvokeAsync(command, "").ConfigureAwait(false);
         if (!result.Success || result.Data == null) return (null, $"{command}: {result.Message}");
         return (JsonSerializer.SerializeToElement(result.Data), null);
     }

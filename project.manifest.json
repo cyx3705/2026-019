@@ -15,7 +15,7 @@
       "documentation"
     ],
     "status": "active",
-    "version": "2.6.2",
+    "version": "2.7.0",
     "branch": "main"
   },
   "paths": {
@@ -88,7 +88,7 @@
     },
     {
       "name": "HistoryVulcan",
-      "version": "5.1.2",
+      "version": "6.0.0",
       "purpose": "Diana 的模块 API、命令总线与正式运行宿主"
     }
   ],
@@ -99,5 +99,33 @@
     "**/bin/**",
     "**/obj/**",
     "**/.vs/**"
-  ]
+  ],
+  "publish": {
+    "versionProps": "b-Code-HistoryDiana\\HistoryDianaVersion.props",
+    "versionProperty": "HistoryDianaVersion",
+    "sourceManifest": "b-Code-HistoryDiana\\module.manifest.json",
+    "packageDocuments": "b-Office-Diana\\package",
+    "package": {
+      "project": "b-Code-HistoryDiana\\HistoryDiana.csproj",
+      "files": [
+        "HistoryDiana.dll",
+        "HistoryDiana.xml",
+        "module.manifest.json"
+      ]
+    },
+    "validation": [
+      {
+        "tool": "dotnet.exe",
+        "arguments": [
+          "run",
+          "--project",
+          "b-Code-HistoryDiana\\tests\\HistoryDiana.Smoke\\HistoryDiana.Smoke.csproj",
+          "-c",
+          "Release",
+          "-p:NuGetAudit=false"
+        ],
+        "description": "Run module Smoke"
+      }
+    ]
+  }
 }

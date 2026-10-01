@@ -10,7 +10,7 @@ namespace HistoryDiana;
 /// </summary>
 internal static class DianaKitCommands
 {
-    public static void Register(CommandRegistry registry)
+    public static void Register(ICommandRegistrar registry)
     {
         ArgumentNullException.ThrowIfNull(registry);
 

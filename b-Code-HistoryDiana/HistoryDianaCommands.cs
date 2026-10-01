@@ -13,8 +13,8 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         "z-Publish", "artifacts",
     };
 
-    private readonly Func<string> _projectLibraryRoot;
-    private readonly Func<OhsmcpClient> _mcpClientFactory;
+    private Func<string>? _projectLibraryRoot;
+    private Func<OhsmcpClient>? _mcpClientFactory;
     private IModuleContext? _context;
 
     public HistoryDianaCommands()
@@ -26,8 +26,8 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         Func<string>? projectLibraryRoot = null,
         Func<OhsmcpClient>? mcpClientFactory = null)
     {
-        _projectLibraryRoot = projectLibraryRoot ?? DianaRuntime.ResolveProjectLibraryRoot;
-        _mcpClientFactory = mcpClientFactory ?? (() => OhsmcpClient.FromEndpoint(DianaRuntime.ReadMcpEndpoint()));
+        _projectLibraryRoot = projectLibraryRoot;
+        _mcpClientFactory = mcpClientFactory;
     }
 
     /// <summary>Attaches the host command bus and stages all module commands.</summary>
@@ -38,25 +38,36 @@ public sealed class HistoryDianaCommands : IModuleContextAware
             throw new InvalidOperationException("HistoryDiana 命令已附着到宿主上下文。");
 
         _context = context;
+        // 2.7.0（宿主 6.0.0 统一契约）：项目库根问 vulcan.host.info，MCP 地址问 portunus.mcp.status，
+        // 截图目录用宿主给的数据目录；不再读 Cursor 配置、endpoint.json 或自己拼 %AppData%。
+        if (_projectLibraryRoot == null)
+        {
+            string? resolved = null;
+            _projectLibraryRoot = () => resolved ??= DianaRuntime.ResolveProjectLibraryRoot(context.Bus);
+        }
+
+        _mcpClientFactory ??= () => OhsmcpClient.FromEndpoint(DianaRuntime.ReadMcpEndpoint(context.Bus));
         context.RegisterCommands(RegisterCommands);
     }
 
-    private void RegisterCommands(CommandRegistry registry)
+    private void RegisterCommands(ICommandRegistrar registry)
     {
         var context = _context
             ?? throw new InvalidOperationException("HistoryDiana 尚未附着到 HistoryVulcan 宿主上下文。");
+        var projectLibraryRoot = _projectLibraryRoot!;
+        var mcpClientFactory = _mcpClientFactory!;
         // 工具箱的另外两类：kit（哈希/编码/标识/时间）与 relay（MCP 工具中继）。
         // host 类只转发宿主自己的只读装载状态：vulcan.module.* 整类不投影到 MCP，
         // 而热重载核对偏偏要读它，见 DianaHostCommands。
         // 按类分文件，但注册入口只有这一处。docs 通道按现场 z-* 扫描登记。
         DianaKitCommands.Register(registry);
-        DianaRelayCommands.Register(registry, _mcpClientFactory);
+        DianaRelayCommands.Register(registry, mcpClientFactory);
         DianaLogCommands.Register(registry, context.Bus);
         DianaHostCommands.Register(registry, context.Bus);
         DianaObservationCommands.Register(registry, context.Bus);
-        DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _), () => Directory.EnumerateDirectories(_projectLibraryRoot()).Where(path => (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0 && IsGitProject(path) && File.Exists(Path.Combine(path, "project.manifest.json"))).Select(path => Path.GetFileName(path)));
-        DianaZDocCommands.Register(registry, _projectLibraryRoot);
-        DianaViewCommands.Register(registry);
+        DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _), () => Directory.EnumerateDirectories(projectLibraryRoot()).Where(path => (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0 && IsGitProject(path) && File.Exists(Path.Combine(path, "project.manifest.json"))).Select(path => Path.GetFileName(path)));
+        DianaZDocCommands.Register(registry, projectLibraryRoot);
+        DianaViewCommands.Register(registry, () => Path.Combine(context.Environment.DataDirectory, "captures"));
 
         // 模块开发路线（工作区、发布、装机）已迁往宿主（HistoryVulcan 5.1.2），
         // 指令名从 diana.* 改为 vulcan.dev.*；
@@ -340,7 +351,7 @@ public sealed class HistoryDianaCommands : IModuleContextAware
             throw new ArgumentException("name 必须是已登记工作树的单一目录名", nameof(name));
         }
 
-        var rootValue = _projectLibraryRoot();
+        var rootValue = (_projectLibraryRoot ?? throw new InvalidOperationException("HistoryDiana 尚未附着到宿主。"))();
         if (!Directory.Exists(rootValue))
             throw new InvalidOperationException("HistoryVulcan 设置缺少有效的 proj.libraryroot；请先配置 HistoryJanus 项目库。");
 

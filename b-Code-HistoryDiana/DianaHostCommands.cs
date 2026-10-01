@@ -14,7 +14,7 @@ namespace HistoryDiana;
 /// </remarks>
 internal static class DianaHostCommands
 {
-    public static void Register(CommandRegistry registry, CommandBus bus)
+    public static void Register(ICommandRegistrar registry, ICommandBus bus)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(bus);
@@ -34,7 +34,7 @@ internal static class DianaHostCommands
             Handler = context => DianaCommandGuard.RunAsync(async () =>
             {
                 var filter = Normalize(context.GetString("name"));
-                var (payload, failure) = await TryReadAsync(bus, "vulcan.module.list", "diana.host.modules")
+                var (payload, failure) = await TryReadAsync(bus, "vulcan.module.list")
                     .ConfigureAwait(false);
                 if (failure != null)
                     return CommandResult.Fail(failure);
@@ -100,7 +100,7 @@ internal static class DianaHostCommands
             Readonly = true,
             Handler = _ => DianaCommandGuard.RunAsync(async () =>
             {
-                var (payload, failure) = await TryReadAsync(bus, "vulcan.module.ready", "diana.host.ready")
+                var (payload, failure) = await TryReadAsync(bus, "vulcan.module.ready")
                     .ConfigureAwait(false);
                 if (failure != null)
                     return CommandResult.Fail(failure);
@@ -120,11 +120,11 @@ internal static class DianaHostCommands
 
     /// <summary>转发一条宿主只读指令，并把结果统一成 <see cref="JsonElement"/>。</summary>
     private static async Task<(JsonElement Payload, string? Failure)> TryReadAsync(
-        CommandBus bus,
-        string command,
-        string source)
+        ICommandBus bus,
+        string command)
     {
-        var result = await bus.ExecuteAsync(command, source).ConfigureAwait(false);
+        // 来源由宿主盖章（module:HistoryDiana，宿主 6.0.0）；只读取数，走安静执行不进控制台。
+        var result = await bus.InvokeAsync(command, "").ConfigureAwait(false);
         if (!result.Success)
         {
             var unavailable = result.Message.Contains("未知指令", StringComparison.OrdinalIgnoreCase)

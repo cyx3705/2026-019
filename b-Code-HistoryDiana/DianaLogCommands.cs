@@ -11,7 +11,7 @@ internal static class DianaLogCommands
     private static readonly HashSet<string> Levels =
         new(["trace", "debug", "info", "warn", "error", "fatal"], StringComparer.OrdinalIgnoreCase);
 
-    public static void Register(CommandRegistry registry, CommandBus bus)
+    public static void Register(ICommandRegistrar registry, ICommandBus bus)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(bus);
@@ -76,7 +76,7 @@ internal static class DianaLogCommands
                     since,
                     after,
                     limit);
-                var provider = await bus.ExecuteAsync(providerCommand, "diana.log.read").ConfigureAwait(false);
+                var provider = await bus.InvokeAsync(providerCommand, "").ConfigureAwait(false);
                 if (!provider.Success)
                 {
                     var unavailable = provider.Message.Contains("未知指令", StringComparison.OrdinalIgnoreCase)

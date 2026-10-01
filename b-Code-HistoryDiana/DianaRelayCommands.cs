@@ -15,9 +15,8 @@ namespace HistoryDiana;
 internal static class DianaRelayCommands
 {
     private const int MaximumArgumentsBytes = 64 * 1024;
-    private const int CycleCallTimeoutSeconds = 21 * 60;
 
-    public static void Register(CommandRegistry registry, Func<OhsmcpClient> clientFactory)
+    public static void Register(ICommandRegistrar registry, Func<OhsmcpClient> clientFactory)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(clientFactory);
@@ -127,9 +126,9 @@ internal static class DianaRelayCommands
                     return CommandResult.Fail($"argumentsjson 不是有效 JSON: {ex.Message}");
                 }
 
-                using var client = name.Equals("diana_release_cycle", StringComparison.OrdinalIgnoreCase)
-                    ? OhsmcpClient.FromEndpoint(DianaRuntime.ReadMcpEndpoint(), CycleCallTimeoutSeconds)
-                    : clientFactory();
+                // 2.7.0：删掉 diana_release_cycle 的长超时特例——发布管线早已迁进宿主（vulcan.release.cycle，对 MCP 隐藏），
+                // 那个工具名不再存在。
+                using var client = clientFactory();
                 var tools = await client.ListToolsAsync().ConfigureAwait(false);
                 var target = tools.FirstOrDefault(tool =>
                     tool.Name.Equals(name, StringComparison.OrdinalIgnoreCase));

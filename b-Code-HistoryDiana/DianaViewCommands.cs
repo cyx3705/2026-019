@@ -14,7 +14,7 @@ internal static class DianaViewCommands
 {
     private const string FrontendProcessName = "HistoryVulcan";
 
-    public static void Register(CommandRegistry registry)
+    public static void Register(ICommandRegistrar registry, Func<string> captureRoot)
     {
         ArgumentNullException.ThrowIfNull(registry);
 
@@ -54,7 +54,7 @@ internal static class DianaViewCommands
             Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {
                 var handle = ParseHandle(context.GetString("handle"));
-                var capture = DianaWindowCapture.Capture(handle);
+                var capture = DianaWindowCapture.Capture(handle, captureRoot());
                 return CommandResult.Ok(
                     $"已捕获 {capture.Title}: {capture.Width}x{capture.Height} PNG，SHA-256 {capture.Sha256}",
                     capture);
@@ -130,7 +130,7 @@ internal static class DianaWindowCapture
             .ToList();
     }
 
-    public static WindowCaptureResult Capture(nint? requestedHandle)
+    public static WindowCaptureResult Capture(nint? requestedHandle, string captureRoot)
     {
         var windows = ListWindows();
         var target = requestedHandle.HasValue
@@ -142,9 +142,7 @@ internal static class DianaWindowCapture
         if (target.Minimized)
             throw new InvalidOperationException("目标前端窗口已最小化；恢复窗口后再捕获，避免得到空白画面");
 
-        var captureRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "HistoryVulcan", "HistoryDiana", "captures");
+        // 2.7.0：截图落在宿主给的数据目录（ModuleData\HistoryDiana\captures），不再自己拼 %AppData%。
         Directory.CreateDirectory(captureRoot);
         var fileName = $"{DateTime.Now:yyyyMMdd-HHmmssfff}-{target.ProcessId}-{target.HandleHex[2..]}-{Guid.NewGuid():N}.png";
         var path = Path.Combine(captureRoot, fileName);

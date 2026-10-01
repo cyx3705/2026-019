@@ -1,7 +1,6 @@
 using System.IO;
 using System.Text.Json;
 using HistoryVulcan.Core.Commands;
-using HistoryVulcan.Core.Storage;
 
 namespace HistoryDiana;
 
@@ -10,7 +9,7 @@ internal static class DianaProjectAlignmentCommands
 {
     private const int MaximumDocumentBytes = 512 * 1024;
 
-    public static void Register(CommandRegistry registry, Func<string, string> resolveProject, Func<IEnumerable<string>> projectNames)
+    public static void Register(ICommandRegistrar registry, Func<string, string> resolveProject, Func<IEnumerable<string>> projectNames)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(resolveProject);

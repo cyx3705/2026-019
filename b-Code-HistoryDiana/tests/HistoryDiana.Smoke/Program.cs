@@ -21,41 +21,53 @@ try
     Directory.CreateDirectory(Path.Combine(worktreeDirectory, "z-Publish"));
     File.WriteAllText(Path.Combine(worktreeDirectory, "z-Publish", "generated.bin"), new string('x', 4096));
 
-    var endpointPath = Path.Combine(temporaryRoot, "endpoint.json");
-    File.WriteAllText(endpointPath, "{\"port\":59095,\"accessToken\":\"smoke-token\"}");
-    var mcpConfigPath = Path.Combine(temporaryRoot, "mcp.json");
+    // 2.7.0：MCP 地址经总线问 portunus.mcp.status（宿主 6.0.0 统一契约），不再读 endpoint.json 或 Cursor 配置。
     var previousEndpoint = Environment.GetEnvironmentVariable("HISTORYVULCAN_ENDPOINT");
-    var previousMcpConfig = Environment.GetEnvironmentVariable("HISTORYVULCAN_MCP_CONFIG");
-    Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", endpointPath);
+    var previousLibraryRoot = Environment.GetEnvironmentVariable("HISTORYCLIO_ROOT");
+    Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", null);
+    Environment.SetEnvironmentVariable("HISTORYCLIO_ROOT", null);
     try
     {
-        var endpoint = DianaRuntime.ReadMcpEndpoint();
-        Equal("http://127.0.0.1:59095/mcp", endpoint.Uri.ToString(), "MCP endpoint URI");
-        Equal("smoke-token", endpoint.AccessToken, "MCP endpoint token");
+        string? statusUrl = "http://127.0.0.1:8777/mcp";
+        var portunus = new TestRegistrar();
+        portunus.Register(new CommandDescriptor
+        {
+            Name = "portunus.mcp.status",
+            Summary = "fake",
+            Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("status", new { running = statusUrl != null, url = statusUrl })),
+        });
+        portunus.Register(new CommandDescriptor
+        {
+            Name = "vulcan.host.info",
+            Summary = "fake",
+            Handler = CommandDescriptor.Sync(_ => CommandResult.Ok("info", new { libraryRoot = temporaryRoot })),
+        });
+        var portunusBus = new TestCommandBus(portunus);
 
-        Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", null);
-        Environment.SetEnvironmentVariable("HISTORYVULCAN_MCP_CONFIG", mcpConfigPath);
-        File.WriteAllText(mcpConfigPath,
-            "{\"mcpServers\":{\"history-vulcan\":{\"url\":\"http://127.0.0.1:8777/mcp\"}}}");
-        endpoint = DianaRuntime.ReadMcpEndpoint();
-        Equal("http://127.0.0.1:8777/mcp", endpoint.Uri.ToString(), "Cursor MCP config URI");
+        var endpoint = DianaRuntime.ReadMcpEndpoint(portunusBus);
+        Equal("http://127.0.0.1:8777/mcp", endpoint.Uri.ToString(), "portunus.mcp.status 给出的 MCP URI");
         Equal<string?>(null, endpoint.AccessToken, "本机 MCP 不持券");
+        Equal(Path.GetFullPath(temporaryRoot), DianaRuntime.ResolveProjectLibraryRoot(portunusBus), "项目库根问 vulcan.host.info");
 
-        File.WriteAllText(mcpConfigPath,
-            "{\"mcpServers\":{\"history-vulcan\":{\"url\":\"https://example.com/mcp\"}}}");
-        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(), "MCP 端点必须限制为本机回环");
+        statusUrl = "https://example.com/mcp";
+        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(portunusBus), "MCP 端点必须限制为本机回环");
 
-        File.WriteAllText(mcpConfigPath,
-            "{\"mcpServers\":{\"history-vulcan\":{\"url\":8777}}}");
-        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(), "MCP URL 类型错误必须明确失败");
+        statusUrl = null;
+        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(portunusBus), "MCP 未运行必须明确失败");
+        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(new TestCommandBus(new TestRegistrar())),
+            "Portunus 未装载必须明确失败");
 
+        Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", "http://127.0.0.1:59095/mcp");
+        Equal("http://127.0.0.1:59095/mcp", DianaRuntime.ReadMcpEndpoint(null).Uri.ToString(), "环境变量覆盖");
+        Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", Path.Combine(temporaryRoot, "endpoint.json"));
+        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(null), "不再接受 endpoint.json 路径");
         Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", "https://127.0.0.1:8777/mcp");
-        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(), "显式 MCP URL 也必须拒绝 HTTPS");
+        Throws<InvalidOperationException>(() => DianaRuntime.ReadMcpEndpoint(null), "显式 MCP URL 也必须拒绝 HTTPS");
     }
     finally
     {
         Environment.SetEnvironmentVariable("HISTORYVULCAN_ENDPOINT", previousEndpoint);
-        Environment.SetEnvironmentVariable("HISTORYVULCAN_MCP_CONFIG", previousMcpConfig);
+        Environment.SetEnvironmentVariable("HISTORYCLIO_ROOT", previousLibraryRoot);
     }
 
     using (var rows = JsonDocument.Parse(
@@ -118,10 +130,9 @@ try
     File.WriteAllText(Path.Combine(unsignedPackage, "SHA256SUMS"),
         $"{Hash(unsignedDocumentPath)}  docs/不应出现.md{Environment.NewLine}");
 
-    var registry = new CommandRegistry();
-    var log = new TestLog();
-    var bus = new CommandBus(registry, log);
-    var context = new TestModuleContext(bus, registry);
+    var registry = new TestRegistrar();
+    var bus = new TestCommandBus(registry);
+    var context = new TestModuleContext(bus, registry, Path.Combine(temporaryRoot, "ModuleData", "HistoryDiana"));
     new HistoryDianaCommands(() => temporaryRoot).Attach(context);
 
     var assembly = typeof(HistoryDianaCommands).Assembly;
@@ -504,21 +515,19 @@ static void Throws<TException>(Action action, string message) where TException :
     throw new InvalidOperationException(message);
 }
 
-sealed class TestModuleContext(CommandBus bus, CommandRegistry registry) : IModuleContext
+sealed class TestModuleContext(TestCommandBus bus, TestRegistrar registry, string dataDirectory) : IModuleContext
 {
-    public CommandBus Bus { get; } = bus;
-    public void RegisterCommands(Action<CommandRegistry> configure) => configure(registry);
+    public ICommandBus Bus { get; } = bus;
+    public IModuleLog Log { get; } = new TestLog();
+    public IModuleEnvironment Environment { get; } = new TestEnvironment(dataDirectory);
+    public void RegisterCommands(Action<ICommandRegistrar> configure) => configure(registry);
 }
 
-sealed class TestLog : IShellLog
+sealed class TestEnvironment(string dataDirectory) : IModuleEnvironment
 {
-    private readonly List<ShellLogEntry> _entries = [];
-    public event EventHandler<ShellLogEntry>? EntryAdded;
-    public void Log(ShellLogLevel level, string category, string message)
-    {
-        var entry = new ShellLogEntry(DateTime.Now, level, category, message);
-        _entries.Add(entry);
-        EntryAdded?.Invoke(this, entry);
-    }
-    public IReadOnlyList<ShellLogEntry> Snapshot() => _entries;
+    public string ModuleName => "HistoryDiana";
+    public string DataDirectory => dataDirectory;
+    public string PackageDirectory => AppContext.BaseDirectory;
+    public HostRunMode RunMode => HostRunMode.Probe;
+    public string HostVersion => "6.0.0";
 }

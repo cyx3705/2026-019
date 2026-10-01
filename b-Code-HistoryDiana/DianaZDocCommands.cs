@@ -21,7 +21,7 @@ internal static class DianaZDocCommands
         ".md", ".txt",
     };
 
-    public static void Register(CommandRegistry registry, Func<string> projectLibraryRoot)
+    public static void Register(ICommandRegistrar registry, Func<string> projectLibraryRoot)
     {
         ArgumentNullException.ThrowIfNull(registry);
         ArgumentNullException.ThrowIfNull(projectLibraryRoot);
