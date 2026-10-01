@@ -32,10 +32,10 @@ HistoryDiana 是 OneHistory 的 **AI 工具区**：统一承接面向 AI 的跨�
 | `project` | `diana.project.manifest` / `docs` / `align` | 项目 manifest、现行文档与入口对齐检查 |
 | `kit` | `diana.kit.sha256` / `base64` / `guid` / `now` | 无副作用的小计算 |
 | `relay` | `diana.relay.list` / `describe` / `call` | 按当前 MCP 策略列举与调用工具 |
-| `docs` | `diana.docs.catalog` / `read` | 现场扫描 z 通道，按模块域读取已发布文档 |
+| `docs` | `diana.docs.catalog` / `read` / `audit` | 现查宿主指令目录：按域列出、渲染说明书、检查自描述缺陷 |
 | `view` | `diana.view.windows` / `capture` | 列出并原尺寸捕获 HistoryVulcan 前端窗口 |
 
-跨项目读文档：先 `diana.docs.catalog`，再 `diana.docs.read domain=<域>`。完整参数与返回见 [模块 API](./b-Office-Diana/package/模块API.md)。
+查别的模块怎么调用：先 `diana.docs.catalog`，再 `diana.docs.read domain=<域> [class=<类>]` 或 `command=<指令>`。2.8.0 起说明书就是注册自描述，没有消费文档。
 
 ## 入口
 
@@ -48,8 +48,6 @@ HistoryDiana 是 OneHistory 的 **AI 工具区**：统一承接面向 AI 的跨�
 | [技术合同](./b-Office-Diana/current/技术合同.md) | 现行需求与架构 |
 | [有效决策](./b-Office-Diana/current/有效决策.md) | 仍然有效的关键决策 |
 | [验证合同](./b-Office-Diana/current/验证合同.md) | 验证层级、命令与证据 |
-| [模块 API](./b-Office-Diana/package/模块API.md) | 跨模块消费合同 |
-| [模块开发观察手册](./b-Office-Diana/package/模块开发观察手册.md) | 开发任一模块时，一轮里在哪三处用 Diana 取证 |
 
 ## 目录
 
@@ -57,7 +55,7 @@ HistoryDiana 是 OneHistory 的 **AI 工具区**：统一承接面向 AI 的跨�
 | --- | --- |
 | `b-Code-HistoryDiana/` | 模块源码、manifest 与 `tests/` 下的 Smoke |
 | `b-Code/` | 项目合同检查与候选构建辅助脚本 |
-| `b-Office-Diana/` | 项目文档：`current/` 现行合同、`package/` 消费合同、`history/` 只读归档 |
+| `b-Office-Diana/` | 项目文档：`current/` 现行合同、`history/` 只读归档 |
 | `b-References/` | 参考图 |
 | `z-Publish/` | 正式快照与 `history/` 归档，由宿主管线写入 |
 
@@ -81,7 +79,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\b-Code\Test-ProjectContrac
 - Diana 不登记 `diana.worktree.*`、`diana.release.*`、`diana.trial.*`，也不经 `diana.relay.call` 绕行开发管线。
 - 宿主 5.8.0 起不登记模块：本仓的发布描述在根 `project.manifest.json` 的 `publish` 节；
   `HistoryVulcan` 是宿主，走 `vulcan.release.cycle`，禁止走模块开发管线。
-- `diana.project.docs` 只用于已授权项目的维护；跨项目消费一律走 `diana.docs.catalog/read`。
+- `diana.project.docs` 只用于已授权项目的维护；查别的模块的指令一律走 `diana.docs.catalog/read`。
 
 ## 保留内容
 - 本模板项目介绍：此为最初的准备的项目模板

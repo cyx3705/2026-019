@@ -41,7 +41,14 @@ internal static class DianaProjectAlignmentCommands
             Parameters =
             [
                 Text("name", "已登记工作树名称", required: true, position: 0),
-                Text("kind", "文档类型：overview、technicalContract、decisions、verification", "overview", position: 1),
+                new ParameterSpec
+                {
+                    Name = "kind",
+                    Description = "要读的现行文档，对应 manifest documents 里的同名键",
+                    Default = "overview",
+                    Position = 1,
+                    AllowedValues = ["overview", "technicalContract", "decisions", "verification"],
+                },
             ],
             Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {

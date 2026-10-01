@@ -14,10 +14,6 @@ $publishRoot = Join-Path $repoRoot 'z-Publish'
 
 $projectPath = Join-Path $repoRoot 'b-Code-HistoryDiana\HistoryDiana.csproj'
 $manifestSource = Join-Path $repoRoot 'b-Code-HistoryDiana\module.manifest.json'
-$packageDocuments = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'b-Office-Diana\package') -Filter '*.md' -File)
-if ($packageDocuments.Count -eq 0) {
-    throw 'b-Office-Diana/package must contain at least one Markdown document'
-}
 $releaseRoot = Join-Path $repoRoot "b-Code-HistoryDiana\bin\$Configuration\net8.0-windows"
 $historyVulcanRoot = if ([string]::IsNullOrWhiteSpace($HistoryVulcanPackageRoot)) {
     [IO.Path]::GetFullPath((Join-Path $repoRoot '..\2026-023-HistoryVulcan\z-Publish'))
@@ -33,8 +29,8 @@ $backup = Join-Path $transactionRoot 'previous'
 function Assert-ModulePackage {
     param([string]$Root, [string]$ExpectedVersion)
 
-    $expectedFiles = @('HistoryDiana.dll', 'HistoryDiana.xml', 'module.manifest.json', 'SHA256SUMS') +
-        @($packageDocuments | ForEach-Object { "docs/$($_.Name)" }) | Sort-Object
+    # 2.8.0（宿主 6.1.0 DEC-072）：包里不再带 docs/ 消费文档。
+    $expectedFiles = @('HistoryDiana.dll', 'HistoryDiana.xml', 'module.manifest.json', 'SHA256SUMS') | Sort-Object
     $rootPrefix = [IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
     $historyPrefix = $rootPrefix + 'history\'
     $actualFiles = @(Get-ChildItem -LiteralPath $Root -File -Recurse |
@@ -120,13 +116,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $releaseRoot 'HistoryDiana.dll') -Destination $stage
     Copy-Item -LiteralPath (Join-Path $releaseRoot 'HistoryDiana.xml') -Destination $stage
     Copy-Item -LiteralPath $manifestSource -Destination (Join-Path $stage 'module.manifest.json')
-    $docsRoot = Join-Path $stage 'docs'
-    New-Item -ItemType Directory -Force -Path $docsRoot | Out-Null
-    foreach ($document in $packageDocuments) {
-        Copy-Item -LiteralPath $document.FullName -Destination (Join-Path $docsRoot $document.Name)
-    }
-    $relativeFiles = @('HistoryDiana.dll', 'HistoryDiana.xml', 'module.manifest.json') +
-        @($packageDocuments | ForEach-Object { "docs/$($_.Name)" })
+    $relativeFiles = @('HistoryDiana.dll', 'HistoryDiana.xml', 'module.manifest.json')
     $checksumLines = foreach ($file in $relativeFiles) {
         "$((Get-FileHash -LiteralPath (Join-Path $stage $file.Replace('/', '\')) -Algorithm SHA256).Hash)  $file"
     }

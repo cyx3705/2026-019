@@ -15,13 +15,12 @@
       "documentation"
     ],
     "status": "active",
-    "version": "2.7.1",
+    "version": "2.8.0",
     "branch": "main"
   },
   "paths": {
     "activeRoots": [
       "b-Office-Diana/current",
-      "b-Office-Diana/package",
       "b-Code",
       "b-Code-HistoryDiana"
     ],
@@ -49,11 +48,8 @@
   },
   "documents": {
     "center": "b-Office-Diana/文档中心.md",
-    "package": "b-Office-Diana/package/模块API.md",
-    "developmentObservation": "b-Office-Diana/package/模块开发观察手册.md",
     "overview": "b-Office-Diana/current/项目概览.md",
     "technicalContract": "b-Office-Diana/current/技术合同.md",
-    "consoleLogRequirement": "b-Office-Diana/current/原生控制台日志查看需求书.md",
     "decisions": "b-Office-Diana/current/有效决策.md",
     "verification": "b-Office-Diana/current/验证合同.md"
   },
@@ -104,7 +100,6 @@
     "versionProps": "b-Code-HistoryDiana\\HistoryDianaVersion.props",
     "versionProperty": "HistoryDianaVersion",
     "sourceManifest": "b-Code-HistoryDiana\\module.manifest.json",
-    "packageDocuments": "b-Office-Diana\\package",
     "package": {
       "project": "b-Code-HistoryDiana\\HistoryDiana.csproj",
       "files": [

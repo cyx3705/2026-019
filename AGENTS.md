@@ -7,11 +7,10 @@
 1. 读取根目录 `project.manifest.json`，确认项目身份、状态、活动目录和可用命令。
 2. 读取根目录 `README.md` 和 `b-Office-Diana/current/项目概览.md`。
 3. 根据任务读取 `b-Office-Diana/current/技术合同.md`、`有效决策.md` 或 `验证合同.md`；涉及目录治理时
-   读取 `b-Office-Diana/文档中心.md` 的“目录规范”，涉及跨项目复用时再读取
-   `b-Office-Diana/package/模块API.md`。开发或发布 OneHistory 模块时读取宿主
-   `vulcan.dev.*` 合同（HistoryVulcan `b-Office/package/模块开发手册.md`），
-   不要从 Diana 命令面猜测流程。跨项目说明书不要打开别的 worktree、也不要读手写文件表：
-   先执行 `diana.docs.catalog`，把完整输出留在本对话中，再调用其中一条 `diana.docs.<通道>`。
+   读取 `b-Office-Diana/文档中心.md` 的“目录规范”。开发或发布 OneHistory 模块时读取宿主
+   `vulcan.dev.*` 合同（HistoryVulcan `b-Office/current/模块开发手册.md`），
+   不要从 Diana 命令面猜测流程。别的模块的指令怎么调用，不要打开别的 worktree、也不要读手写文件表：
+   先执行 `diana.docs.catalog`，把完整输出留在本对话中，再 `diana.docs.read domain=<域>`（读注册自描述）。
 4. 只进入 manifest 声明的活动目录。发现未登记目录时，先确认其级别、所有者和用途。
 
 ## 真值与冲突处理
@@ -37,8 +36,8 @@
 - 不执行 Git commit、tag、push、正式发布或外部部署，除非用户明确要求。
 - 新增活动目录、外部依赖或验证命令时，同步更新 `project.manifest.json` 和相关现行文档。
 - `b-Code/` 保存项目合同校验和候选构建辅助脚本；`b-Code-HistoryDiana/` 只保存 Diana 源码和测试，不在其中创建 `docs/`；人工维护的 Diana 文档
-  应放入 `b-Office-Diana/current/` 或 `b-Office-Diana/package/`。模块消费文档只由各模块仓库的
-  `b-Office/package/` 编辑并发布到各自 `z-*/docs/`，跨项目读取统一走 Diana MCP，不再建立集中副本区。
+  只放入 `b-Office-Diana/current/`。2.8.0 起没有消费文档：指令说明书只来自各模块注册时的自描述，
+  由 `diana.docs.*` 现查宿主指令目录渲染，不再建立任何副本。
 
 ## 实施与验证
 

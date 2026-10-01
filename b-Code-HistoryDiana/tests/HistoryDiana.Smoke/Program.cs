@@ -85,51 +85,6 @@ try
             "2026-023-HistoryVulcan", "HistoryJanus"),
         "对齐检查必须拒绝不匹配的 manifest 产品名");
 
-    var channelPackage = Path.Combine(
-        temporaryRoot, "2026-020-HistoryJanus", "z-Publish", "HistoryJanus-v9.9.9");
-    Directory.CreateDirectory(Path.Combine(channelPackage, "docs"));
-    var apiPath = Path.Combine(channelPackage, "docs", "模块API.md");
-    File.WriteAllText(apiPath, "# Janus API\nintro\n## 命令\ncommand-body\n````ps\n# A. 检查\n```\n# 仍在代码块\n````\n~~~\n## 示例标题\n~~~\nend-command-body\n## 窗口\nwindow-body\n");
-    var changelogPath = Path.Combine(channelPackage, "docs", "变更摘要.md");
-    var changelog = new StringBuilder("# 变更\n## 主要变化\n- 9.9.9 first-item\n  continued-line\n- 9.9.8 other-item\n## 附录\n");
-    while (Encoding.UTF8.GetByteCount(changelog.ToString()) <= 12 * 1024)
-        changelog.Append("padding-line-to-force-outline\n");
-    File.WriteAllText(changelogPath, changelog.ToString());
-    var manyHeadingsPath = Path.Combine(channelPackage, "docs", "章节很多.md");
-    File.WriteAllText(manyHeadingsPath, string.Join('\n',
-        Enumerable.Range(1, 60).Select(index => $"## 章节 {index}\nbody")));
-    var channelManifestPath = Path.Combine(channelPackage, "module.manifest.json");
-    File.WriteAllText(channelManifestPath,
-        """
-        {"schemaVersion":1,"type":"HistoryVulcan.Module","name":"HistoryJanus","version":"9.9.9","artifact":"HistoryJanus.dll","ui":false}
-        """);
-    File.WriteAllText(Path.Combine(channelPackage, "SHA256SUMS"), string.Join(Environment.NewLine,
-        $"{Hash(apiPath)}  docs/模块API.md",
-        $"{Hash(changelogPath)}  docs/变更摘要.md",
-        $"{Hash(manyHeadingsPath)}  docs/章节很多.md",
-        $"{Hash(channelManifestPath)}  module.manifest.json") + Environment.NewLine);
-
-    var invalidPackage = Path.Combine(
-        temporaryRoot, "2026-998-HistoryBroken", "z-Publish", "HistoryBroken-v1.0.0");
-    Directory.CreateDirectory(Path.Combine(invalidPackage, "docs"));
-    var invalidDocumentPath = Path.Combine(invalidPackage, "docs", "不应出现.md");
-    var invalidManifestPath = Path.Combine(invalidPackage, "module.manifest.json");
-    File.WriteAllText(invalidDocumentPath, "# invalid package");
-    File.WriteAllText(invalidManifestPath, "{invalid-json");
-    File.WriteAllText(Path.Combine(invalidPackage, "SHA256SUMS"), string.Join(Environment.NewLine,
-        $"{Hash(invalidDocumentPath)}  docs/不应出现.md",
-        $"{Hash(invalidManifestPath)}  module.manifest.json") + Environment.NewLine);
-
-    var unsignedPackage = Path.Combine(
-        temporaryRoot, "2026-997-HistoryUnsigned", "z-Publish", "HistoryUnsigned-v1.0.0");
-    Directory.CreateDirectory(Path.Combine(unsignedPackage, "docs"));
-    var unsignedDocumentPath = Path.Combine(unsignedPackage, "docs", "不应出现.md");
-    File.WriteAllText(unsignedDocumentPath, "# unsigned manifest");
-    File.WriteAllText(Path.Combine(unsignedPackage, "module.manifest.json"),
-        "{\"name\":\"HistoryUnsigned\",\"version\":\"1.0.0\"}");
-    File.WriteAllText(Path.Combine(unsignedPackage, "SHA256SUMS"),
-        $"{Hash(unsignedDocumentPath)}  docs/不应出现.md{Environment.NewLine}");
-
     var registry = new TestRegistrar();
     var bus = new TestCommandBus(registry);
     var context = new TestModuleContext(bus, registry, Path.Combine(temporaryRoot, "ModuleData", "HistoryDiana"));
@@ -156,7 +111,7 @@ try
                  "diana.relay.call", "diana.relay.describe", "diana.relay.list",
                  "diana.log.read",
                  "diana.host.modules", "diana.host.ready", "diana.host.observe",
-                 "diana.docs.catalog", "diana.docs.read",
+                 "diana.docs.audit", "diana.docs.catalog", "diana.docs.read",
                  "diana.view.capture", "diana.view.windows",
              })
     {
@@ -424,49 +379,120 @@ try
     True(!invalidHandle.Success && invalidHandle.Message.Contains("handle 必须", StringComparison.Ordinal),
         "图形查看器必须返回可修正的句柄错误");
 
-    var catalog = await bus.ExecuteAsync("diana.docs.catalog", "smoke");
-    True(catalog.Success && catalog.Message.Contains("diana.docs.read domain=janus", StringComparison.Ordinal),
-        "catalog 必须列出版本化候选通道");
-    True(!catalog.Message.Contains("domain=broken", StringComparison.Ordinal), "manifest 损坏的发布包不得形成文档通道");
-    True(!catalog.Message.Contains("domain=unsigned", StringComparison.Ordinal), "manifest 未受 SHA256SUMS 保护的发布包不得形成文档通道");
-    True(catalog.Message.Contains("History*-v*", StringComparison.Ordinal), "catalog 必须说明版本化候选规则");
-    True(!catalog.Message.Contains("current", StringComparison.OrdinalIgnoreCase), "catalog 不得引用 current 层");
-    var listed = await bus.ExecuteAsync("diana.docs.read domain=janus", "smoke");
-    True(listed.Success && listed.Message.Contains("docs/模块API.md", StringComparison.Ordinal), "文档通道列举");
-    var opened = await bus.ExecuteAsync("diana.docs.read domain=janus file=模块API.md heading=命令", "smoke");
-    True(opened.Success && JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("command-body", StringComparison.Ordinal), "文档按节读取");
-    True(!JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("window-body", StringComparison.Ordinal), "按节读取不得越界");
-    True(!opened.Message.Contains("command-body", StringComparison.Ordinal), "正文只保留在 Data 中");
-    True(JsonSerializer.SerializeToElement(opened.Data).GetProperty("Content").GetString()!.Contains("end-command-body", StringComparison.Ordinal),
-        "反引号及波浪号围栏中的标题不得截断章节，短围栏不得提前闭合");
-    var codeHeading = await bus.ExecuteAsync("diana.docs.read domain=janus file=模块API.md heading=示例标题", "smoke");
-    True(!codeHeading.Success && !codeHeading.Message.Contains("示例标题、", StringComparison.Ordinal), "代码块标题不得可选或进入目录");
-    var outline = await bus.ExecuteAsync("diana.docs.read domain=janus file=docs/变更摘要.md", "smoke");
-    True(outline.Success && outline.Message.Contains("版本:", StringComparison.Ordinal), "长文默认返回目录");
-    var versionSlice = await bus.ExecuteAsync("diana.docs.read domain=janus file=变更摘要.md heading=9.9.9", "smoke");
-    True(versionSlice.Success && JsonSerializer.SerializeToElement(versionSlice.Data).GetProperty("Content").GetString()!.Contains("first-item", StringComparison.Ordinal), "按版本读取");
-    True(!JsonSerializer.SerializeToElement(versionSlice.Data).GetProperty("Content").GetString()!.Contains("other-item", StringComparison.Ordinal), "版本读取不得带入其他版本");
-    True(!(await bus.ExecuteAsync("diana.docs.read domain=janus file=../secret.md", "smoke")).Success, "文档路径不得越界");
-    var missingHeading = await bus.ExecuteAsync(
-        "diana.docs.read domain=janus file=docs/章节很多.md heading=不存在", "smoke");
-    True(!missingHeading.Success
-         && missingHeading.Message.Contains("前 20/60 项", StringComparison.Ordinal)
-         && missingHeading.Message.Length < 2048,
-        "无效 heading 的建议必须限长并指向完整目录");
+    // 2.8.0：说明书只来自宿主指令目录（注册即文档）。目录替身按宿主 6.0.0 的驼峰 JSON 形状，
+    // 把本测试登记口里的真实指令连同一条故意写坏自描述的假模块指令一起交出去。
+    True(!(await bus.ExecuteAsync("diana.docs.catalog", "smoke")).Success, "宿主未登记 vulcan.command.list 时必须明确失败");
+    registry.Register(new CommandDescriptor
+    {
+        Name = "janus.proj.broken",
+        Domain = "janus",
+        CommandClass = "proj",
+        Summary = "坏",
+        Example = "janus.proj.broken mode=fast extra=1",
+        Parameters =
+        [
+            new ParameterSpec { Name = "name", Description = "项目", Required = true, Default = "x" },
+            new ParameterSpec { Name = "mode", Description = "运行模式，详见模块API", AllowedValues = ["slow", "safe"], Default = "turbo" },
+            new ParameterSpec { Name = "dry", Description = "只演练不落盘", Type = ParamType.Bool },
+            new ParameterSpec { Name = "path", Description = "目标路径", Position = 1 },
+            new ParameterSpec { Name = "level", Description = "级别：low、mid、high" },
+        ],
+        Handler = CommandDescriptor.Sync(_ => CommandResult.Ok()),
+    });
+    registry.Register(new CommandDescriptor
+    {
+        Name = "janus.go",
+        Domain = "janus",
+        Summary = "两段名指令，用来核对说明书分组",
+        Handler = CommandDescriptor.Sync(_ => CommandResult.Ok()),
+    });
+    registry.Register(new CommandDescriptor
+    {
+        Name = "vulcan.command.list",
+        Domain = "vulcan",
+        CommandClass = "command",
+        Summary = "smoke host command catalog",
+        Readonly = true,
+        Handler = CommandDescriptor.Sync(_ => CommandResult.Ok(data: JsonSerializer.SerializeToElement(
+            registry.All().Select(item =>
+            {
+                var domain = item.Name.Split('.')[0];
+                var module = domain is "diana" or "janus";
+                return new Dictionary<string, object?>
+                {
+                    ["commandName"] = item.Name,
+                    ["domain"] = domain,
+                    ["commandClass"] = item.CommandClass ?? "",
+                    ["summary"] = item.Summary,
+                    ["example"] = item.Example,
+                    ["source"] = module ? "module" : "framework:service",
+                    ["sourceDetail"] = domain == "diana" ? "HistoryDiana" : domain == "janus" ? "HistoryJanus" : null,
+                    ["dangerous"] = item.Level == CommandLevel.Ask,
+                    ["requiresUiThread"] = item.RequiresUiThread,
+                    ["readonly"] = item.Readonly,
+                    ["hiddenReason"] = item.HiddenReason,
+                    ["allowUnspecifiedParameters"] = item.AllowUnspecifiedParameters,
+                    ["parameters"] = item.Parameters.Select(parameter => new Dictionary<string, object?>
+                    {
+                        ["name"] = parameter.Name,
+                        ["type"] = parameter.Type.ToString().ToLowerInvariant(),
+                        ["required"] = parameter.Required,
+                        ["default"] = parameter.Default,
+                        ["position"] = parameter.Position,
+                        ["allowedValues"] = parameter.AllowedValues ?? [],
+                        ["description"] = parameter.Description,
+                    }).ToArray(),
+                };
+            }).ToArray()))),
+    });
 
-    var externalDocument = Path.Combine(temporaryRoot, "outside.md");
-    var linkedDocument = Path.Combine(channelPackage, "docs", "linked.md");
-    File.WriteAllText(externalDocument, "outside");
-    try
+    var catalog = await bus.ExecuteAsync("diana.docs.catalog", "smoke");
+    True(catalog.Success && catalog.Message.Contains("HistoryDiana", StringComparison.Ordinal)
+         && catalog.Message.Contains("HistoryJanus", StringComparison.Ordinal)
+         && catalog.Message.Contains("docs(3)", StringComparison.Ordinal),
+        $"catalog 必须按域列出所属模块与命令类计数: {catalog.Message}");
+    True(!catalog.Message.Contains("z-Publish", StringComparison.Ordinal), "catalog 不得再指向 z 文档");
+
+    var domainManual = await bus.ExecuteAsync("diana.docs.read domain=diana class=host", "smoke");
+    True(domainManual.Success, domainManual.Message);
+    var manualText = JsonSerializer.SerializeToElement(domainManual.Data).GetProperty("manual").GetString()!;
+    True(manualText.Contains("### diana.host.modules", StringComparison.Ordinal)
+         && manualText.Contains("示例：diana.host.modules name=HistoryDiana", StringComparison.Ordinal)
+         && manualText.Contains("- name（string，可省略）", StringComparison.Ordinal),
+        $"按类读取必须渲染用途、参数与示例: {manualText}");
+    True(!manualText.Contains("diana.kit.", StringComparison.Ordinal), "按类读取不得越出该类");
+    True(!domainManual.Message.Contains("###", StringComparison.Ordinal), "正文只保留在 Data 中");
+
+    var single = await bus.ExecuteAsync("diana.docs.read command=diana.log.read", "smoke");
+    var singleText = JsonSerializer.SerializeToElement(single.Data).GetProperty("manual").GetString()!;
+    True(single.Success && singleText.Contains("默认 error", StringComparison.Ordinal)
+         && singleText.Contains("取值 trace|debug|info|warn|error|fatal", StringComparison.Ordinal),
+        $"单条读取必须带默认值与取值: {singleText}");
+    var writeManual = JsonSerializer.SerializeToElement(
+        (await bus.ExecuteAsync("diana.docs.read command=diana.relay.call", "smoke")).Data).GetProperty("manual").GetString()!;
+    True(writeManual.Contains("· 写", StringComparison.Ordinal), "写命令必须标出");
+    True(!(await bus.ExecuteAsync("diana.docs.read", "smoke")).Success, "domain 与 command 都缺时必须失败");
+    var unknownDomain = await bus.ExecuteAsync("diana.docs.read domain=ghost", "smoke");
+    True(!unknownDomain.Success && unknownDomain.Message.Contains("diana", StringComparison.Ordinal), "未知域必须列出可用域");
+    var unknownClass = await bus.ExecuteAsync("diana.docs.read domain=diana class=ghost", "smoke");
+    True(!unknownClass.Success && unknownClass.Message.Contains("docs", StringComparison.Ordinal), "未知类必须列出可用类");
+    True(!(await bus.ExecuteAsync("diana.docs.read command=diana.ghost.read", "smoke")).Success, "未知指令必须失败");
+
+    var ownAudit = await bus.ExecuteAsync("diana.docs.audit domain=diana", "smoke");
+    True(ownAudit.Success && JsonSerializer.SerializeToElement(ownAudit.Data).GetProperty("findingCount").GetInt32() == 0,
+        $"Diana 自己的自描述必须零缺陷: {ownAudit.Message}");
+    var brokenAudit = await bus.ExecuteAsync("diana.docs.audit domain=janus", "smoke");
+    True(brokenAudit.Success, brokenAudit.Message);
+    var rules = JsonSerializer.SerializeToElement(brokenAudit.Data).GetProperty("findings").EnumerateArray()
+        .Select(item => item.GetProperty("rule").GetString()!).ToHashSet(StringComparer.Ordinal);
+    foreach (var rule in new[]
+             {
+                 "summary-missing", "parameter-undescribed", "required-with-default", "default-not-allowed",
+                 "bool-without-default", "position-gap", "retired-doc-reference", "example-bad-parameter",
+                 "example-missing-required", "allowed-values-in-text", "name-two-segment",
+             })
     {
-        File.CreateSymbolicLink(linkedDocument, externalDocument);
-        Throws<InvalidOperationException>(
-            () => DianaZDocCommands.ResolveInside(channelPackage, "docs/linked.md"),
-            "文档路径不得通过重解析点越出发布包");
-    }
-    catch (Exception ex) when (ex is UnauthorizedAccessException or PlatformNotSupportedException)
-    {
-        // Some Windows CI accounts cannot create symbolic links; production guard is still compiled.
+        True(rules.Contains(rule), $"audit 必须查出 {rule}: {brokenAudit.Message}");
     }
 
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
@@ -481,8 +507,6 @@ finally
 }
 
 Console.WriteLine($"HistoryDiana.Smoke: PASS (1 module, {commandCount} commands in {classCount} classes)");
-
-static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
 
 static void True(bool condition, string message)
 {
