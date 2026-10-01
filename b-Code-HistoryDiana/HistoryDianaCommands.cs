@@ -59,14 +59,14 @@ public sealed class HistoryDianaCommands : IModuleContextAware
         // 工具箱的另外两类：kit（哈希/编码/标识/时间）与 relay（MCP 工具中继）。
         // host 类只转发宿主自己的只读装载状态：vulcan.module.* 整类不投影到 MCP，
         // 而热重载核对偏偏要读它，见 DianaHostCommands。
-        // 按类分文件，但注册入口只有这一处。docs 通道按现场 z-* 扫描登记。
+        // 按类分文件，但注册入口只有这一处。docs 类现查宿主指令目录：注册即文档（2.8.0）。
         DianaKitCommands.Register(registry);
         DianaRelayCommands.Register(registry, mcpClientFactory);
         DianaLogCommands.Register(registry, context.Bus);
         DianaHostCommands.Register(registry, context.Bus);
         DianaObservationCommands.Register(registry, context.Bus);
         DianaProjectAlignmentCommands.Register(registry, name => ResolveProject(name, out _), () => Directory.EnumerateDirectories(projectLibraryRoot()).Where(path => (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0 && IsGitProject(path) && File.Exists(Path.Combine(path, "project.manifest.json"))).Select(path => Path.GetFileName(path)));
-        DianaZDocCommands.Register(registry, projectLibraryRoot);
+        DianaDocsCommands.Register(registry, context.Bus);
         DianaViewCommands.Register(registry, () => Path.Combine(context.Environment.DataDirectory, "captures"));
 
         // 模块开发路线（工作区、发布、装机）已迁往宿主（HistoryVulcan 5.1.2），

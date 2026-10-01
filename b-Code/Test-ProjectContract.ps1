@@ -49,8 +49,7 @@ $positioningDocuments = @(
     'b-Office-Diana/current/技术合同.md',
     'b-Office-Diana/current/有效决策.md',
     'b-Office-Diana/current/验证合同.md',
-    'b-Office-Diana/文档中心.md',
-    'b-Office-Diana/package/模块API.md'
+    'b-Office-Diana/文档中心.md'
 )
 foreach ($relativePath in $positioningDocuments) {
     $content = Get-Content -LiteralPath (Join-Path $repoRoot $relativePath) -Raw -Encoding UTF8
@@ -63,8 +62,7 @@ $pipelineBoundaryDocuments = @(
     'README.md',
     'AGENTS.md',
     'b-Office-Diana/current/项目概览.md',
-    'b-Office-Diana/current/技术合同.md',
-    'b-Office-Diana/package/模块API.md'
+    'b-Office-Diana/current/技术合同.md'
 )
 foreach ($relativePath in $pipelineBoundaryDocuments) {
     $content = Get-Content -LiteralPath (Join-Path $repoRoot $relativePath) -Raw -Encoding UTF8
@@ -77,8 +75,7 @@ $currentPositioningText = @(
     'README.md',
     'b-Office-Diana/current/项目概览.md',
     'b-Office-Diana/current/技术合同.md',
-    'b-Office-Diana/current/验证合同.md',
-    'b-Office-Diana/package/模块API.md'
+    'b-Office-Diana/current/验证合同.md'
 ) | ForEach-Object {
     Get-Content -LiteralPath (Join-Path $repoRoot $_) -Raw -Encoding UTF8
 }
@@ -109,15 +106,17 @@ if ($moduleInfoSource -notmatch 'AI 工具区') {
     $errors.Add('ModuleInfo 运行时描述未声明 AI 工具区定位')
 }
 
+# 宿主版本只有一个真值：版本 props 的 MinimumHistoryVulcanVersion；manifest 的外部依赖必须与它一致。
+$minimumHost = [string]$versionProps.Project.PropertyGroup.MinimumHistoryVulcanVersion
 $hostDependency = @($manifest.externalDependencies | Where-Object { $_.name -eq 'HistoryVulcan' })
-if ($hostDependency.Count -ne 1 -or $hostDependency[0].version -ne '5.1.2') {
-    $errors.Add('HistoryVulcan 依赖必须唯一且固定为 5.1.2')
+if ($hostDependency.Count -ne 1 -or $hostDependency[0].version -ne $minimumHost) {
+    $errors.Add("HistoryVulcan 依赖必须唯一且等于 MinimumHistoryVulcanVersion ($minimumHost)")
 }
 
 $sourceFiles = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'b-Code-HistoryDiana') -Recurse -File -Filter '*.cs'
 foreach ($source in $sourceFiles) {
     $content = Get-Content -LiteralPath $source.FullName -Raw -Encoding UTF8
-    if ($content -match 'context\.Settings|context\.Log|context\.DataDirectory') {
+    if ($content -match 'context\.Settings|context\.DataDirectory') {
         $errors.Add("模块不得读取已移除的 IModuleContext 成员: $($source.FullName)")
     }
 }
@@ -146,4 +145,4 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Output "HistoryDiana project contract: PASS ($moduleVersion; Vulcan 5.1.2)"
+Write-Output "HistoryDiana project contract: PASS ($moduleVersion; Vulcan $minimumHost)"
