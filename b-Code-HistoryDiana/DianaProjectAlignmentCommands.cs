@@ -4,7 +4,7 @@ using HistoryVulcan.Core.Commands;
 
 namespace HistoryDiana;
 
-/// <summary>Provides read-only project manifest, current-document, and cross-project alignment views.</summary>
+/// <summary>只读查看已登记项目的 manifest、现行文档和对齐结果。文档读 manifest 里声明的路径，不写死四份合同。</summary>
 internal static class DianaProjectAlignmentCommands
 {
     private const int MaximumDocumentBytes = 512 * 1024;
@@ -35,34 +35,26 @@ internal static class DianaProjectAlignmentCommands
             Name = "diana.project.docs",
             Domain = "HistoryDiana",
             CommandClass = "project",
-            Summary = "维护已授权项目时按 manifest 读取现行文档；跨项目消费必须用 diana.docs.catalog/read",
-            Example = "diana.project.docs name=2026-020-HistoryJanus kind=overview",
+            Summary = "维护已授权项目时按 manifest documents 读取现行文档；查别的模块怎么调用用 diana.docs.catalog/read",
+            Example = "diana.project.docs name=2026-021-HistoryMercury kind=conventions",
             Readonly = true,
             Parameters =
             [
-                Text("name", "已登记工作树名称", required: true, position: 0),
+                Text("name", "已登记工作树名称，例如 2026-021-HistoryMercury", required: true, position: 0),
                 new ParameterSpec
                 {
                     Name = "kind",
-                    Description = "要读的现行文档，对应 manifest documents 里的同名键",
-                    Default = "overview",
+                    // 不写 Default：省略时要看这份 manifest 有没有 conventions。写了默认值，总线会代填，两种仓就分不开。
+                    Description = "manifest documents 里的键。省略时：声明了 conventions 就读它，否则读 overview",
                     Position = 1,
-                    AllowedValues = ["overview", "technicalContract", "decisions", "verification"],
+                    AllowedValues = ["conventions", "overview", "technicalContract", "decisions", "verification"],
                 },
             ],
             Handler = CommandDescriptor.Sync(context => DianaCommandGuard.Run(() =>
             {
                 var root = resolveProject(context.RequireString("name"));
                 var manifest = ReadManifest(root);
-                var kind = (context.GetString("kind") ?? "overview").Trim();
-                var relativePath = kind switch
-                {
-                    "overview" => manifest.Overview,
-                    "technicalContract" => manifest.TechnicalContract,
-                    "decisions" => manifest.Decisions,
-                    "verification" => manifest.Verification,
-                    _ => throw new ArgumentException("kind 必须是 overview、technicalContract、decisions 或 verification"),
-                };
+                var (kind, relativePath) = ResolveDocument(manifest, context.GetString("kind"));
                 var path = ResolveDeclaredFile(root, relativePath);
                 var info = new FileInfo(path);
                 if (info.Length > MaximumDocumentBytes)
@@ -109,10 +101,13 @@ internal static class DianaProjectAlignmentCommands
         {
             var root = resolveProject(name);
             var manifest = ReadManifest(root);
-            var documents = new[] { manifest.Overview, manifest.TechnicalContract, manifest.Decisions, manifest.Verification };
-            var documentStates = documents.Select(path => new DocumentState(path, File.Exists(ResolveDeclaredFile(root, path)))).ToList();
+            // 入口以 manifest 实际声明的为准。改造完的仓只有 conventions；还没改的仍是四份旧键。缺一则不算对齐。
+            var documentStates = manifest.Documents
+                .Select(item => new DocumentState(item.Key, item.Value, File.Exists(ResolveDeclaredFile(root, item.Value))))
+                .ToList();
             var aligned = MatchesProjectIdentity(name, manifest.Name)
                           && manifest.SourceRoots.Count > 0
+                          && documentStates.Count > 0
                           && documentStates.All(item => item.Exists);
             return new AlignmentResult(name, aligned, manifest.Name, manifest.Version, documentStates, null);
         }
@@ -139,18 +134,40 @@ internal static class DianaProjectAlignmentCommands
         var documents = RequiredObject(json, "documents");
         var commands = RequiredObject(json, "commands");
         var sourceRoots = ReadStringArray(paths, "sourceRoots");
+        var documentPaths = documents.EnumerateObject()
+            .Where(item => item.Value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.Value.GetString()))
+            .ToDictionary(item => item.Name, item => item.Value.GetString()!, StringComparer.OrdinalIgnoreCase);
+        if (documentPaths.Count == 0)
+            throw new InvalidOperationException("manifest documents 没有可读取的路径");
         return new ProjectManifest(
             RequiredString(project, "name"),
             RequiredString(project, "version"),
             RequiredString(project, "status"),
             ReadStringArray(paths, "activeRoots"),
             sourceRoots,
-            RequiredString(documents, "overview"),
-            RequiredString(documents, "technicalContract"),
-            RequiredString(documents, "decisions"),
-            RequiredString(documents, "verification"),
+            documentPaths,
             commands.EnumerateObject().ToDictionary(item => item.Name, item => item.Value.GetString() ?? "", StringComparer.OrdinalIgnoreCase));
     }
+
+    private static (string Kind, string RelativePath) ResolveDocument(ProjectManifest manifest, string? requested)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+        {
+            if (manifest.Documents.TryGetValue("conventions", out var conventions))
+                return ("conventions", conventions);
+            if (manifest.Documents.TryGetValue("overview", out var overview))
+                return ("overview", overview);
+            throw new ArgumentException("未指定 kind，且 manifest 既没有 conventions 也没有 overview。可用键: " + JoinKeys(manifest));
+        }
+
+        var kind = requested.Trim();
+        if (!manifest.Documents.TryGetValue(kind, out var relativePath))
+            throw new ArgumentException($"manifest documents 没有键 {kind}。可用键: {JoinKeys(manifest)}");
+        return (kind, relativePath);
+    }
+
+    private static string JoinKeys(ProjectManifest manifest)
+        => string.Join("、", manifest.Documents.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase));
 
     private static string ResolveDeclaredFile(string root, string relativePath)
     {
@@ -184,10 +201,10 @@ internal static class DianaProjectAlignmentCommands
 
     private sealed record ProjectManifest(
         string Name, string Version, string Status, IReadOnlyList<string> ActiveRoots,
-        IReadOnlyList<string> SourceRoots, string Overview, string TechnicalContract,
-        string Decisions, string Verification, IReadOnlyDictionary<string, string> Commands);
+        IReadOnlyList<string> SourceRoots, IReadOnlyDictionary<string, string> Documents,
+        IReadOnlyDictionary<string, string> Commands);
 
-    private sealed record DocumentState(string Path, bool Exists);
+    private sealed record DocumentState(string Kind, string Path, bool Exists);
 
     private sealed record AlignmentResult(
         string Project, bool Aligned, string? ManifestName, string? Version,

@@ -4,7 +4,7 @@ using HistoryVulcan.Core.Modules;
 
 namespace HistoryDiana;
 
-/// <summary>Registers the HistoryDiana read-only worktree inspection commands.</summary>
+/// <summary>模块入口。Attach 时把七类 <c>diana.*</c> 指令登记到宿主总线，不另建第二套入口。</summary>
 public sealed class HistoryDianaCommands : IModuleContextAware
 {
     private static readonly HashSet<string> GeneratedDirectories = new(StringComparer.OrdinalIgnoreCase)

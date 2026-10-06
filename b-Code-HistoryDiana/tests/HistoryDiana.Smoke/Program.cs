@@ -1,8 +1,10 @@
 using System.IO;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Windows.Media.Imaging;
+using System.Xml.Linq;
 using BaseVariable;
 using HistoryDiana;
 using HistoryVulcan.Core.Commands;
@@ -375,6 +377,48 @@ try
         .EnumerateArray().Any(item => item.GetString() == projectName), "新增项目自动进入对齐检查，损坏 manifest 作为失败行返回");
     var selectedAlign = await bus.ExecuteAsync($"diana.project.align name={projectName}", "smoke");
     Equal(1, JsonSerializer.SerializeToElement(selectedAlign.Data).GetProperty("Total").GetInt32(), "name 只检查目标项目");
+
+    // 文档改造后长期文档只剩 documents.conventions。尚未改造的仓仍是四份旧键。
+    // 两种 manifest 都要能读；省略 kind 不能再写死 overview，否则已改造的仓会读空。
+    var conventionsRelative = Path.Combine("b-Office", "current", "现行约定.md");
+    Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(worktreeDirectory, conventionsRelative))!);
+    File.WriteAllText(Path.Combine(worktreeDirectory, conventionsRelative), "HistoryDiana smoke conventions");
+    File.WriteAllText(Path.Combine(worktreeDirectory, "project.manifest.json"),
+        ManifestJson("HistoryDianaSmoke", """ "conventions": "b-Office/current/现行约定.md" """));
+    var conventionsAlign = await bus.ExecuteAsync($"diana.project.align name={projectName}", "smoke");
+    Equal(1, JsonSerializer.SerializeToElement(conventionsAlign.Data).GetProperty("Passed").GetInt32(),
+        "只声明 conventions 的项目必须对齐通过");
+    var omittedKind = await bus.ExecuteAsync($"diana.project.docs name={projectName}", "smoke");
+    True(omittedKind.Success && JsonSerializer.Serialize(omittedKind.Data).Contains("smoke conventions", StringComparison.Ordinal),
+        "省略 kind 时优先读 conventions");
+    True((await bus.ExecuteAsync($"diana.project.docs name={projectName} kind=conventions", "smoke")).Success,
+        "kind=conventions 必须能读现行约定");
+    var missingKind = await bus.ExecuteAsync($"diana.project.docs name={projectName} kind=overview", "smoke");
+    True(!missingKind.Success && missingKind.Message.Contains("conventions", StringComparison.Ordinal),
+        "项目没声明的文档键必须失败并列出可用键");
+
+    File.WriteAllText(Path.Combine(worktreeDirectory, "overview.md"), "legacy overview");
+    File.WriteAllText(Path.Combine(worktreeDirectory, "technical.md"), "legacy technical");
+    File.WriteAllText(Path.Combine(worktreeDirectory, "decisions.md"), "legacy decisions");
+    File.WriteAllText(Path.Combine(worktreeDirectory, "verification.md"), "legacy verification");
+    File.WriteAllText(Path.Combine(worktreeDirectory, "project.manifest.json"),
+        ManifestJson("HistoryDianaSmoke", """
+            "overview": "overview.md",
+            "technicalContract": "technical.md",
+            "decisions": "decisions.md",
+            "verification": "verification.md"
+            """));
+    var legacyDocs = await bus.ExecuteAsync($"diana.project.docs name={projectName}", "smoke");
+    True(legacyDocs.Success && JsonSerializer.Serialize(legacyDocs.Data).Contains("legacy overview", StringComparison.Ordinal),
+        "未改造的仓省略 kind 时仍读 overview");
+    var legacyAlign = await bus.ExecuteAsync($"diana.project.align name={projectName}", "smoke");
+    Equal(1, JsonSerializer.SerializeToElement(legacyAlign.Data).GetProperty("Passed").GetInt32(),
+        "四份旧文档都在时对齐仍然通过");
+    File.WriteAllText(Path.Combine(worktreeDirectory, "project.manifest.json"),
+        ManifestJson("HistoryDianaSmoke", """ "overview": "missing.md" """));
+    Equal(0, JsonSerializer.SerializeToElement((await bus.ExecuteAsync($"diana.project.align name={projectName}", "smoke")).Data)
+            .GetProperty("Passed").GetInt32(),
+        "声明了但磁盘上没有的文档必须让对齐失败");
     var invalidHandle = await bus.ExecuteAsync("diana.view.capture handle=invalid", "smoke");
     True(!invalidHandle.Success && invalidHandle.Message.Contains("handle 必须", StringComparison.Ordinal),
         "图形查看器必须返回可修正的句柄错误");
@@ -503,6 +547,8 @@ try
     True(directFindings.Count == 0, $"janus.go 不得报缺陷: {string.Join(",", directFindings)}");
     True(!rules.Contains("name-two-segment"), "两段名不再是缺陷");
 
+    // 代码面的说明书是随包的 HistoryDiana.xml。每个公开类型都必须有 summary。
+    AssertPublicTypeSummaries(assembly);
     Equal(0, assembly.GetTypes().Count(type => type.Name.Contains("ProjectPulse", StringComparison.Ordinal)),
         "程序集不得保留 ProjectPulse 类型");
     Equal(0, assembly.GetTypes().Count(type => type.Name.Equals("IUiModule", StringComparison.Ordinal)),
@@ -515,6 +561,42 @@ finally
 }
 
 Console.WriteLine($"HistoryDiana.Smoke: PASS (1 module, {commandCount} commands in {classCount} classes)");
+
+static string ManifestJson(string name, string documents)
+    => $$"""
+    {
+      "project": { "name": "{{name}}", "version": "0", "status": "active" },
+      "paths": { "activeRoots": ["b-Code"], "sourceRoots": ["b-Code"] },
+      "documents": { {{documents}} },
+      "commands": { "test": "" }
+    }
+    """;
+
+/// <summary>
+/// 随包 XML 必须给每个公开类型一句 summary。属性逐个补不强求，类型级说清楚它是什么、谁用它就够。
+/// </summary>
+static void AssertPublicTypeSummaries(Assembly assembly)
+{
+    var beside = Path.ChangeExtension(assembly.Location, ".xml");
+    var xmlPath = File.Exists(beside)
+        ? beside
+        : beside.Replace(
+            $"{Path.DirectorySeparatorChar}tests{Path.DirectorySeparatorChar}HistoryDiana.Smoke{Path.DirectorySeparatorChar}",
+            $"{Path.DirectorySeparatorChar}",
+            StringComparison.OrdinalIgnoreCase);
+    True(File.Exists(xmlPath), "HistoryDiana.xml must be generated beside the module assembly: " + xmlPath);
+    var documented = XDocument.Load(xmlPath)
+        .Descendants("member")
+        .Where(member => member.Element("summary") is { } summary && !string.IsNullOrWhiteSpace(summary.Value))
+        .Select(member => (string?)member.Attribute("name"))
+        .ToHashSet(StringComparer.Ordinal);
+    var missing = assembly.GetExportedTypes()
+        .Select(type => "T:" + type.FullName!.Replace('+', '.'))
+        .Where(id => !documented.Contains(id))
+        .OrderBy(id => id, StringComparer.Ordinal)
+        .ToList();
+    True(missing.Count == 0, "Public types missing summary: " + string.Join(", ", missing));
+}
 
 static void True(bool condition, string message)
 {

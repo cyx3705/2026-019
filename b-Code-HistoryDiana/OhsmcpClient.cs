@@ -254,4 +254,5 @@ internal sealed class OhsmcpClient : IDisposable
     public void Dispose() => _http.Dispose();
 }
 
+/// <summary><c>diana.relay.list</c> 的一行：当前 MCP 策略下可见的工具名、说明和入参 JSON Schema。</summary>
 public sealed record RelayTool(string Name, string Description, JsonElement InputSchema);

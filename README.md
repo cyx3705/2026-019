@@ -43,11 +43,7 @@ HistoryDiana 是 OneHistory 的 **AI 工具区**：统一承接面向 AI 的跨�
 | --- | --- |
 | [`AGENTS.md`](./AGENTS.md) | AI 工作合同：读取顺序、真值判定、边界 |
 | [`project.manifest.json`](./project.manifest.json) | 项目身份、活动目录、文档与命令 |
-| [文档中心](./b-Office-Diana/文档中心.md) | 文档索引与读取顺序 |
-| [项目概览](./b-Office-Diana/current/项目概览.md) | 目标、范围与状态 |
-| [技术合同](./b-Office-Diana/current/技术合同.md) | 现行需求与架构 |
-| [有效决策](./b-Office-Diana/current/有效决策.md) | 仍然有效的关键决策 |
-| [验证合同](./b-Office-Diana/current/验证合同.md) | 验证层级、命令与证据 |
+| [现行约定](./b-Office-Diana/current/现行约定.md) | 唯一的长期文档：真相在哪、取舍、真机才知道的、工程约定 |
 
 ## 目录
 
@@ -55,7 +51,7 @@ HistoryDiana 是 OneHistory 的 **AI 工具区**：统一承接面向 AI 的跨�
 | --- | --- |
 | `b-Code-HistoryDiana/` | 模块源码、manifest 与 `tests/` 下的 Smoke |
 | `b-Code/` | 项目合同检查与候选构建辅助脚本 |
-| `b-Office-Diana/` | 项目文档：`current/` 现行合同、`history/` 只读归档 |
+| `b-Office-Diana/` | `current/现行约定.md`，仅此一份 |
 | `b-References/` | 参考图 |
 | `z-Publish/` | 正式快照与 `history/` 归档，由宿主管线写入 |
 

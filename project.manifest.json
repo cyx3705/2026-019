@@ -15,7 +15,7 @@
       "documentation"
     ],
     "status": "active",
-    "version": "2.8.1",
+    "version": "2.8.2",
     "branch": "main"
   },
   "paths": {
@@ -34,7 +34,6 @@
       "z-Publish"
     ],
     "archiveRoots": [
-      "b-Office-Diana/history",
       "z-Publish/history"
     ],
     "releaseRoots": [
@@ -47,11 +46,7 @@
     ]
   },
   "documents": {
-    "center": "b-Office-Diana/文档中心.md",
-    "overview": "b-Office-Diana/current/项目概览.md",
-    "technicalContract": "b-Office-Diana/current/技术合同.md",
-    "decisions": "b-Office-Diana/current/有效决策.md",
-    "verification": "b-Office-Diana/current/验证合同.md"
+    "conventions": "b-Office-Diana/current/现行约定.md"
   },
   "contract": {
     "requiredFiles": [
@@ -89,7 +84,6 @@
     }
   ],
   "contextExclusions": [
-    "b-Office-Diana/history/**",
     "z-Publish/**",
     "b-References/**",
     "**/bin/**",

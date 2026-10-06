@@ -2,6 +2,10 @@
 
 namespace HistoryDiana;
 
+/// <summary>
+/// 模块身份。名称与版本供宿主发现；版本取自程序集，必须与 <c>module.manifest.json</c> 逐字符相等，
+/// 否则宿主静默跳过整个模块。
+/// </summary>
 public sealed class ModuleInfo : ModuleInfoBase
 {
     public override string ModuleName => "HistoryDiana";

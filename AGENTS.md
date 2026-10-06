@@ -5,21 +5,17 @@
 ## 启动读取顺序
 
 1. 读取根目录 `project.manifest.json`，确认项目身份、状态、活动目录和可用命令。
-2. 读取根目录 `README.md` 和 `b-Office-Diana/current/项目概览.md`。
-3. 根据任务读取 `b-Office-Diana/current/技术合同.md`、`有效决策.md` 或 `验证合同.md`；涉及目录治理时
-   读取 `b-Office-Diana/文档中心.md` 的“目录规范”。开发或发布 OneHistory 模块时读取宿主
-   `vulcan.dev.*` 合同（HistoryVulcan `b-Office/current/模块开发手册.md`），
-   不要从 Diana 命令面猜测流程。别的模块的指令怎么调用，不要打开别的 worktree、也不要读手写文件表：
-   先执行 `diana.docs.catalog`，把完整输出留在本对话中，再 `diana.docs.read domain=<域>`（读注册自描述）。
+2. 读取根目录 `README.md` 和 `b-Office-Diana/current/现行约定.md`（本仓唯一的长期文档）。
+3. 查任何模块（含本模块）的指令怎么调用：先执行 `diana.docs.catalog`，把完整输出留在本对话中，再
+   `diana.docs.read domain=<域>`。说明书就是注册时的自描述（宿主 6.1.0 起没有消费文档）；
+   不要打开别的 worktree，也不要依赖手写文件表。开发或发布模块时读取宿主
+   `vulcan.dev.*` 合同（HistoryVulcan `b-Office/current/模块开发手册.md`），不要从 Diana 命令面猜测流程。
 4. 只进入 manifest 声明的活动目录。发现未登记目录时，先确认其级别、所有者和用途。
 
 ## 真值与冲突处理
 
 - 用户当前指令决定本次任务范围，但不能隐式授权提交、推送、发布或破坏性操作。
-- 目标行为以现行需求和有效决策为准；当前实现以测试、运行结果和源码共同判断。
-- `项目概览.md` 中的状态只描述进度，不得代替技术或验证合同。
-- `b-Office-Diana/history/` 不属于常用读取范围。确需版本背景时只读取版本号最高的最新一份 `V*`
-  文档；旧 V 文档仅在用户明确要求追溯指定版本时读取最小必要部分，且不得覆盖现行合同。
+- 目标行为以 `现行约定.md`、代码注释与 Smoke 为准；当前实现以测试、运行结果和源码共同判断。
 - 根目录可见文件夹只允许 `a-*` 子项目、`b-*` 项目组件和 `z-*` 跨项目复用元目录。
 - 文档与实现冲突时必须指出冲突，不能静默选择一方并改写另一方。
 
@@ -30,13 +26,13 @@
 - 唯一基础设施例外是 HistoryVulcan 已冻结的 `vulcan.dev.start/submit/finish` 模块开发管线。
   它只走 Console CLI，不得迁回 Diana，也不得通过 MCP 或 `diana.relay.call` 执行。
 - 修改前后检查 Git 状态，保留用户已有改动，不回退无关文件。
-- 默认不扫描 `b-Office/history/`、`z-Publish/`、生成目录或大型二进制文件。
+- 默认不扫描 `z-Publish/`、生成目录或大型二进制文件。
 - 不直接编辑生成物、正式发布快照、归档和第三方依赖；应修改其权威源并按既定流程生成。
 - 不把密钥、令牌、个人路径或机器专用状态写入仓库。
 - 不执行 Git commit、tag、push、正式发布或外部部署，除非用户明确要求。
 - 新增活动目录、外部依赖或验证命令时，同步更新 `project.manifest.json` 和相关现行文档。
-- `b-Code/` 保存项目合同校验和候选构建辅助脚本；`b-Code-HistoryDiana/` 只保存 Diana 源码和测试，不在其中创建 `docs/`；人工维护的 Diana 文档
-  只放入 `b-Office-Diana/current/`。2.8.0 起没有消费文档：指令说明书只来自各模块注册时的自描述，
+- `b-Code/` 保存项目合同校验和候选构建辅助脚本；`b-Code-HistoryDiana/` 只保存 Diana 源码和测试，不在其中创建 `docs/`。
+  本仓长期文档只有 `b-Office-Diana/current/现行约定.md`。指令说明书只来自各模块注册时的自描述，
   由 `diana.docs.*` 现查宿主指令目录渲染，不再建立任何副本。
 
 ## 实施与验证
