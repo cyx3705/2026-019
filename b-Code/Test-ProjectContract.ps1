@@ -45,7 +45,7 @@ if ($manifest.project.title -ne 'HistoryDiana AI 工具区') {
 $positioningDocuments = @(
     'README.md',
     'AGENTS.md',
-    'b-Office-Diana/current/现行约定.md'
+    'b-Office-Diana/现行约定.md'
 )
 foreach ($relativePath in $positioningDocuments) {
     $content = Get-Content -LiteralPath (Join-Path $repoRoot $relativePath) -Raw -Encoding UTF8
@@ -57,7 +57,7 @@ foreach ($relativePath in $positioningDocuments) {
 $pipelineBoundaryDocuments = @(
     'README.md',
     'AGENTS.md',
-    'b-Office-Diana/current/现行约定.md'
+    'b-Office-Diana/现行约定.md'
 )
 foreach ($relativePath in $pipelineBoundaryDocuments) {
     $content = Get-Content -LiteralPath (Join-Path $repoRoot $relativePath) -Raw -Encoding UTF8
@@ -68,7 +68,7 @@ foreach ($relativePath in $pipelineBoundaryDocuments) {
 
 $currentPositioningText = @(
     'README.md',
-    'b-Office-Diana/current/现行约定.md'
+    'b-Office-Diana/现行约定.md'
 ) | ForEach-Object {
     Get-Content -LiteralPath (Join-Path $repoRoot $_) -Raw -Encoding UTF8
 }

@@ -5,7 +5,7 @@
 ## 启动读取顺序
 
 1. 读取根目录 `project.manifest.json`，确认项目身份、状态、活动目录和可用命令。
-2. 读取根目录 `README.md` 和 `b-Office-Diana/current/现行约定.md`（本仓唯一的长期文档）。
+2. 读取根目录 `README.md` 和 `b-Office-Diana/现行约定.md`（本仓唯一的长期文档）。
 3. 查任何模块（含本模块）的指令怎么调用：先执行 `diana.docs.catalog`，把完整输出留在本对话中，再
    `diana.docs.read domain=<域>`。说明书就是注册时的自描述（宿主 6.1.0 起没有消费文档）；
    不要打开别的 worktree，也不要依赖手写文件表。开发或发布模块时读取宿主
@@ -32,7 +32,7 @@
 - 不执行 Git commit、tag、push、正式发布或外部部署，除非用户明确要求。
 - 新增活动目录、外部依赖或验证命令时，同步更新 `project.manifest.json` 和相关现行文档。
 - `b-Code/` 保存项目合同校验和候选构建辅助脚本；`b-Code-HistoryDiana/` 只保存 Diana 源码和测试，不在其中创建 `docs/`。
-  本仓长期文档只有 `b-Office-Diana/current/现行约定.md`。指令说明书只来自各模块注册时的自描述，
+  本仓长期文档只有 `b-Office-Diana/现行约定.md`。指令说明书只来自各模块注册时的自描述，
   由 `diana.docs.*` 现查宿主指令目录渲染，不再建立任何副本。
 
 ## 实施与验证

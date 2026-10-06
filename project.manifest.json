@@ -20,7 +20,7 @@
   },
   "paths": {
     "activeRoots": [
-      "b-Office-Diana/current",
+      "b-Office-Diana",
       "b-Code",
       "b-Code-HistoryDiana"
     ],
@@ -46,7 +46,7 @@
     ]
   },
   "documents": {
-    "conventions": "b-Office-Diana/current/现行约定.md"
+    "conventions": "b-Office-Diana/现行约定.md"
   },
   "contract": {
     "requiredFiles": [

@@ -380,11 +380,11 @@ try
 
     // 文档改造后长期文档只剩 documents.conventions。尚未改造的仓仍是四份旧键。
     // 两种 manifest 都要能读；省略 kind 不能再写死 overview，否则已改造的仓会读空。
-    var conventionsRelative = Path.Combine("b-Office", "current", "现行约定.md");
+    var conventionsRelative = Path.Combine("b-Office", "现行约定.md");
     Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(worktreeDirectory, conventionsRelative))!);
     File.WriteAllText(Path.Combine(worktreeDirectory, conventionsRelative), "HistoryDiana smoke conventions");
     File.WriteAllText(Path.Combine(worktreeDirectory, "project.manifest.json"),
-        ManifestJson("HistoryDianaSmoke", """ "conventions": "b-Office/current/现行约定.md" """));
+        ManifestJson("HistoryDianaSmoke", """ "conventions": "b-Office/现行约定.md" """));
     var conventionsAlign = await bus.ExecuteAsync($"diana.project.align name={projectName}", "smoke");
     Equal(1, JsonSerializer.SerializeToElement(conventionsAlign.Data).GetProperty("Passed").GetInt32(),
         "只声明 conventions 的项目必须对齐通过");
